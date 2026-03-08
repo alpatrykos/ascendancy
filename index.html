@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ascendancy</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23091018' d='M0 0h64v64H0z'/%3E%3Cpath fill='%23f0bd55' d='M32 6 10 18l22 12 22-12zM18 31l14 8 14-8v13L32 58 18 44z'/%3E%3C/svg%3E">
+  <style>
+    :root{--panel:rgba(17,27,43,.86);--panel-soft:rgba(24,37,58,.74);--border:rgba(255,214,138,.24);--text:#f6f1df;--muted:#b7b6ad;--accent:#ffd26c;--shadow:0 24px 48px rgba(0,0,0,.36)}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;color:var(--text);background:radial-gradient(circle at top left,rgba(255,209,108,.14),transparent 28%),radial-gradient(circle at top right,rgba(74,140,175,.14),transparent 28%),linear-gradient(180deg,#172436 0%,#091018 100%);font-family:"Trebuchet MS",Verdana,sans-serif}
+    .shell{max-width:1320px;margin:0 auto;padding:20px}
+    .masthead{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin-bottom:18px}
+    h1{margin:0;font-size:clamp(2.2rem,4vw,4rem);letter-spacing:.08em;text-transform:uppercase;font-family:"Palatino Linotype","Book Antiqua",Georgia,serif}
+    .subtitle{margin:8px 0 0;color:var(--muted);max-width:640px;line-height:1.5}
+    .playfield{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start}
+    .card,.instructions{background:var(--panel);border:1px solid var(--border);border-radius:22px;box-shadow:var(--shadow);backdrop-filter:blur(12px)}
+    .canvas-card{padding:18px}
+    canvas{display:block;width:100%;max-width:720px;background:linear-gradient(135deg,rgba(255,211,130,.08),rgba(39,87,119,.08)),#132131;border:1px solid rgba(255,255,255,.06);border-radius:16px;cursor:pointer}
+    .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;color:var(--muted);font-size:.92rem}
+    .legend span{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.06)}
+    .swatch{width:12px;height:12px;border-radius:3px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+    .hud{display:grid;gap:14px}
+    .card{padding:16px}
+    .card h2,.instructions h2{margin:0 0 10px;font-size:1rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+    .setup{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+    .segmented{display:inline-flex;gap:8px;padding:6px;background:rgba(255,255,255,.05);border-radius:999px}
+    .segmented button,button.action,.queue-list button{border:0;border-radius:999px;font-weight:700;cursor:pointer;transition:transform 120ms ease,background 120ms ease,opacity 120ms ease}
+    .segmented button,button.action{background:rgba(255,255,255,.08);color:var(--text);padding:10px 14px}
+    .segmented button.active,button.action.primary{background:linear-gradient(135deg,#ffda89,#d99f35);color:#2d1e03}
+    button.action.secondary{background:rgba(77,167,144,.18);color:#d6f6ec}
+    button.action.ghost{background:rgba(255,255,255,.06);color:var(--muted)}
+    .segmented button:hover,button.action:hover{transform:translateY(-1px)}
+    button:disabled{opacity:.42;cursor:not-allowed;transform:none}
+    .stat-grid,.selection-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .panel-slot{padding:10px 12px;border-radius:14px;background:var(--panel-soft);border:1px solid rgba(255,255,255,.06)}
+    .label{display:block;font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+    .value{font-size:1rem;font-weight:700;line-height:1.35}
+    .player-pill{display:inline-flex;align-items:center;gap:8px}
+    .dot{width:12px;height:12px;border-radius:50%;flex:0 0 12px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.26)}
+    .slider-wrap{margin-top:12px;padding:12px;border-radius:16px;background:var(--panel-soft);border:1px solid rgba(255,255,255,.06)}
+    input[type="range"]{width:100%;accent-color:#ffce61}
+    .button-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+    .player-list,.queue-list,.log-list{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+    .player-list li,.queue-list li,.log-list li{padding:10px 12px;border-radius:14px;background:var(--panel-soft);border:1px solid rgba(255,255,255,.06)}
+    .player-list li{display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .queue-list button{float:right;background:rgba(239,123,107,.18);color:#ffd6d0;padding:6px 10px}
+    .log-list{max-height:256px;overflow:auto}
+    .muted{color:var(--muted)}
+    .instructions{margin-top:18px;padding:18px 20px;line-height:1.6}
+    .instructions ol{margin:8px 0 0 18px;padding:0}
+    @media (max-width:1050px){.playfield{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="masthead">
+      <div>
+        <h1>Ascendancy</h1>
+        <p class="subtitle">Forge an empire across a procedural frontier. Expand into neutral land, break fortified borders, and outmaneuver rival houses before they consume the map.</p>
+      </div>
+      <div class="card">
+        <h2>New Campaign</h2>
+        <div class="setup">
+          <div class="segmented" id="playerButtons">
+            <button type="button" data-count="2">2 Players</button>
+            <button type="button" data-count="3" class="active">3 Players</button>
+            <button type="button" data-count="4">4 Players</button>
+          </div>
+          <button type="button" class="action primary" id="newGameBtn">Generate World</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="playfield">
+      <div class="card canvas-card">
+        <canvas id="board" width="720" height="720" aria-label="Ascendancy map"></canvas>
+        <div class="legend">
+          <span><i class="swatch" style="background:#406b34"></i>Forest slows armies by 1 on entry</span>
+          <span><i class="swatch" style="background:#8a9099"></i>Mountains defend at 1.4x</span>
+          <span><i class="swatch" style="background:#244e84"></i>Water is impassable</span>
+          <span><i class="swatch" style="background:#121a27"></i>Fog hides unseen cells</span>
+        </div>
+      </div>
+
+      <aside class="hud">
+        <section class="card">
+          <h2>Turn Status</h2>
+          <div class="stat-grid">
+            <div class="panel-slot"><span class="label">Round</span><span class="value" id="roundValue">1</span></div>
+            <div class="panel-slot"><span class="label">Phase</span><span class="value" id="phaseValue">Reinforcement</span></div>
+            <div class="panel-slot"><span class="label">Active House</span><span class="value" id="playerValue"></span></div>
+            <div class="panel-slot"><span class="label">Reinforcements</span><span class="value" id="reinforcementValue">0</span></div>
+          </div>
+          <div class="button-row">
+            <button type="button" class="action primary" id="resolveBtn">Resolve Turn</button>
+            <button type="button" class="action ghost" id="clearBtn">End Selection</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Selection</h2>
+          <div class="selection-grid" id="selectionInfo"></div>
+          <div class="slider-wrap">
+            <label class="label" for="armySlider">Armies To Send</label>
+            <div class="value" id="armyValue">1</div>
+            <input id="armySlider" type="range" min="1" max="1" value="1">
+          </div>
+        </section>
+
+        <section class="card"><h2>Houses</h2><ul class="player-list" id="playerList"></ul></section>
+        <section class="card"><h2>Queued Orders</h2><ul class="queue-list" id="queueList"></ul></section>
+        <section class="card"><h2>Campaign Log</h2><ul class="log-list" id="logList"></ul></section>
+      </aside>
+    </div>
+
+    <section class="instructions">
+      <h2>How To Play</h2>
+      <ol>
+        <li>During Reinforcement, click your own visible territories to place all available armies.</li>
+        <li>In Order phase, click one of your territories, choose how many armies to send, then click an adjacent territory to queue a move or attack.</li>
+        <li>Each territory may issue one outgoing order per turn. Click Resolve Turn to process every queued action in order.</li>
+        <li>Forest entry removes 1 committed army, mountains boost defenders, and water blocks all movement.</li>
+        <li>You only see your own lands and adjacent cells. Conquer every non-water territory to achieve Ascendancy.</li>
+      </ol>
+    </section>
+  </div>
+
+  <script>
+    const CONFIG = {
+      width: 20, height: 20, cellSize: 36, maxAiOrders: 6, minPassable: 260, minSeedDistance: 6,
+      terrainDefense: { plains: 1, forest: 1.15, mountains: 1.4 },
+      colors: ["#f0bd55", "#c95a48", "#4aa89f", "#8470d5"],
+      neutralColor: "#66666f",
+      terrainTint: { plains: "rgba(245,215,145,.15)", forest: "rgba(34,91,55,.35)", mountains: "rgba(171,177,188,.38)", water: "rgba(28,68,118,.95)" },
+      fogColor: "rgba(10,14,24,.88)",
+      names: ["Aureline Dominion", "Crimson Reach", "Verdant League", "Duskwind Pact"]
+    };
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const cap = (text) => text[0].toUpperCase() + text.slice(1);
+
+    class Territory {
+      constructor(id, x, y, terrain) {
+        this.id = id; this.x = x; this.y = y; this.terrain = terrain;
+        this.ownerId = terrain === "water" ? null : -1;
+        this.armies = terrain === "water" ? 0 : 1;
+        this.neighbors = [];
+      }
+    }
+
+    class Player {
+      constructor(id, name, color, isHuman) {
+        this.id = id; this.name = name; this.color = color; this.isHuman = isHuman; this.eliminated = false;
+      }
+    }
+
+    class GameState {
+      constructor(playerCount) {
+        this.players = Array.from({ length: playerCount }, (_, id) => new Player(id, CONFIG.names[id], CONFIG.colors[id], id === 0));
+        this.grid = []; this.territories = []; this.currentPlayerIndex = 0; this.phase = "reinforcement";
+        this.reinforcementsLeft = 0; this.selectedTerritoryId = null; this.sendArmies = 1; this.queuedOrders = [];
+        this.visibleIds = new Set(); this.winnerId = null; this.combatLog = []; this.round = 1;
+      }
+      currentPlayer() { return this.players[this.currentPlayerIndex]; }
+      getTerritory(id) { return this.territories[id]; }
+      playerTerritories(playerId) { return this.territories.filter((territory) => territory.ownerId === playerId); }
+      controlledCount(playerId) { return this.playerTerritories(playerId).length; }
+      pushLog(text) { this.combatLog.unshift(text); this.combatLog = this.combatLog.slice(0, 18); }
+    }
+
+    const MapGenerator = {
+      generate(width = CONFIG.width, height = CONFIG.height, playerCount = 3) {
+        for (let attempt = 0; attempt < 500; attempt += 1) {
+          const grid = [], territories = [];
+          for (let y = 0; y < height; y += 1) {
+            const row = [];
+            for (let x = 0; x < width; x += 1) {
+              const id = y * width + x;
+              territories.push(new Territory(id, x, y, this.randomTerrain()));
+              row.push(id);
+            }
+            grid.push(row);
+          }
+          this.buildNeighbors(territories, width, height);
+          const passable = territories.filter((territory) => territory.ownerId !== null);
+          if (passable.length < CONFIG.minPassable || !this.isConnected(passable, territories)) continue;
+          const seeds = this.chooseSeeds(passable, territories, playerCount);
+          const clusters = seeds ? this.growClusters(seeds, territories) : null;
+          if (!clusters) continue;
+          passable.forEach((territory) => { territory.ownerId = -1; territory.armies = 1; });
+          clusters.forEach((cluster, playerId) => {
+            cluster.forEach((id) => { territories[id].ownerId = playerId; territories[id].armies = 2; });
+            territories[seeds[playerId]].armies = 4;
+          });
+          return { grid, territories };
+        }
+        throw new Error("Unable to generate a valid map.");
+      },
+
+      randomTerrain() {
+        const roll = Math.random();
+        if (roll < 0.52) return "plains";
+        if (roll < 0.75) return "forest";
+        if (roll < 0.9) return "mountains";
+        return "water";
+      },
+
+      buildNeighbors(territories, width, height) {
+        const offsets = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        territories.forEach((territory) => {
+          if (territory.terrain === "water") { territory.neighbors = []; return; }
+          territory.neighbors = offsets
+            .map(([dx, dy]) => [territory.x + dx, territory.y + dy])
+            .filter(([x, y]) => x >= 0 && y >= 0 && x < width && y < height)
+            .map(([x, y]) => territories[y * width + x])
+            .filter((neighbor) => neighbor.terrain !== "water")
+            .map((neighbor) => neighbor.id);
+        });
+      },
+
+      isConnected(passable, territories) {
+        const visited = new Set(), queue = [passable[0].id];
+        while (queue.length) {
+          const id = queue.shift();
+          if (visited.has(id)) continue;
+          visited.add(id);
+          territories[id].neighbors.forEach((neighborId) => { if (!visited.has(neighborId)) queue.push(neighborId); });
+        }
+        return visited.size === passable.length;
+      },
+
+      chooseSeeds(passable, territories, playerCount) {
+        const candidates = this.shuffle(passable.map((territory) => territory.id)), seeds = [];
+        for (const id of candidates) {
+          const candidate = territories[id];
+          const farEnough = seeds.every((seedId) => {
+            const seed = territories[seedId];
+            return Math.abs(seed.x - candidate.x) + Math.abs(seed.y - candidate.y) >= CONFIG.minSeedDistance;
+          });
+          if (farEnough) seeds.push(id);
+          if (seeds.length === playerCount) return seeds;
+        }
+        return null;
+      },
+
+      growClusters(seeds, territories) {
+        const claimed = new Set(seeds), clusters = [];
+        for (const seedId of seeds) {
+          const cluster = [seedId], queue = [seedId];
+          while (queue.length && cluster.length < 5) {
+            const current = queue.shift();
+            for (const neighborId of this.shuffle([...territories[current].neighbors])) {
+              if (claimed.has(neighborId)) continue;
+              claimed.add(neighborId);
+              cluster.push(neighborId);
+              queue.push(neighborId);
+              if (cluster.length === 5) break;
+            }
+          }
+          if (cluster.length < 5) return null;
+          clusters.push(cluster);
+        }
+        return clusters;
+      },
+
+      shuffle(list) {
+        for (let i = list.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [list[i], list[j]] = [list[j], list[i]];
+        }
+        return list;
+      }
+    };
+
+    const CombatResolver = {
+      effectiveEntryForce(armies, terrain) { return terrain === "forest" ? Math.max(1, armies - 1) : armies; },
+      coord(territory) { return territory ? `[${territory.x + 1},${territory.y + 1}]` : "the frontier"; },
+      ownerName(state, ownerId) { return ownerId === -1 ? "the neutral frontier" : state.players[ownerId]?.name || "nobody"; },
+      canResolve(order, source, target) {
+        return Boolean(source && target && source.ownerId === order.playerId && source.neighbors.includes(target.id) && target.ownerId !== null && source.armies > order.armies);
+      },
+      resolveMove(order, state) {
+        const source = state.getTerritory(order.fromId), target = state.getTerritory(order.toId), name = state.players[order.playerId].name;
+        if (!this.canResolve(order, source, target)) return `${name} loses the march from ${this.coord(source)}.`;
+        source.armies -= order.armies;
+        const moved = this.effectiveEntryForce(order.armies, target.terrain);
+        target.armies += moved;
+        return `${name} shifts ${moved} armies to ${this.coord(target)}.`;
+      },
+      resolveAttack(order, state) {
+        const source = state.getTerritory(order.fromId), target = state.getTerritory(order.toId), name = state.players[order.playerId].name;
+        if (!this.canResolve(order, source, target)) return `${name} fails to attack ${this.coord(target)}.`;
+        source.armies -= order.armies;
+        const effectiveAttack = this.effectiveEntryForce(order.armies, target.terrain);
+        const terrainModifier = CONFIG.terrainDefense[target.terrain];
+        const attackPower = effectiveAttack * (0.75 + Math.random() * 0.5);
+        const defensePower = target.armies * terrainModifier;
+        if (attackPower > defensePower) {
+          const previousOwner = target.ownerId;
+          const hold = Math.max(1, effectiveAttack - Math.ceil((target.armies * terrainModifier) / 2));
+          target.ownerId = order.playerId;
+          target.armies = hold;
+          return `${name} captures ${this.coord(target)} from ${this.ownerName(state, previousOwner)} with ${hold} armies.`;
+        }
+        const chip = Math.max(0, Math.floor(effectiveAttack / (2 * terrainModifier)));
+        target.armies = Math.max(1, target.armies - chip);
+        return `${name} is repelled at ${this.coord(target)}; defenders lose ${chip}.`;
+      }
+    };
+
+    class Renderer {
+      constructor(canvas) { this.canvas = canvas; this.ctx = canvas.getContext("2d"); }
+      territoryFromEvent(event, state) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = Math.floor(((event.clientX - rect.left) / rect.width) * this.canvas.width / CONFIG.cellSize);
+        const y = Math.floor(((event.clientY - rect.top) / rect.height) * this.canvas.height / CONFIG.cellSize);
+        return x < 0 || y < 0 || x >= CONFIG.width || y >= CONFIG.height ? null : state.grid[y][x];
+      }
+      render(state) {
+        const { ctx } = this;
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        const selected = state.selectedTerritoryId === null ? null : state.getTerritory(state.selectedTerritoryId);
+        const targetSet = new Set(selected ? selected.neighbors : []);
+        for (const territory of state.territories) this.drawCell(ctx, state, territory, selected, targetSet);
+        this.drawOrders(ctx, state);
+        if (state.winnerId !== null) this.drawBanner(ctx, `${state.players[state.winnerId].name} ascends`);
+      }
+      drawCell(ctx, state, territory, selected, targetSet) {
+        const x = territory.x * CONFIG.cellSize, y = territory.y * CONFIG.cellSize, visible = state.visibleIds.has(territory.id);
+        ctx.fillStyle = this.baseColor(state, territory, visible);
+        ctx.fillRect(x, y, CONFIG.cellSize, CONFIG.cellSize);
+        if (visible && territory.terrain !== "water") {
+          ctx.fillStyle = CONFIG.terrainTint[territory.terrain];
+          ctx.fillRect(x, y, CONFIG.cellSize, CONFIG.cellSize);
+        }
+        if (!visible) {
+          ctx.fillStyle = CONFIG.fogColor;
+          ctx.fillRect(x, y, CONFIG.cellSize, CONFIG.cellSize);
+        }
+        ctx.strokeStyle = "rgba(255,255,255,.08)";
+        ctx.strokeRect(x + .5, y + .5, CONFIG.cellSize - 1, CONFIG.cellSize - 1);
+        if (selected && territory.id === selected.id) this.outlineCell(ctx, x, y, "#ffdf8b", 3, 2);
+        else if (selected && targetSet.has(territory.id) && visible) this.outlineCell(ctx, x, y, "rgba(107,234,214,.9)", 2, 3);
+        if (visible && territory.terrain !== "water") this.drawArmyText(ctx, territory, x, y);
+      }
+      outlineCell(ctx, x, y, color, width, inset) {
+        ctx.strokeStyle = color; ctx.lineWidth = width;
+        ctx.strokeRect(x + inset, y + inset, CONFIG.cellSize - inset * 2, CONFIG.cellSize - inset * 2);
+        ctx.lineWidth = 1;
+      }
+      drawArmyText(ctx, territory, x, y) {
+        ctx.fillStyle = "#f8f5eb"; ctx.font = "bold 15px Trebuchet MS"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 4;
+        ctx.fillText(String(territory.armies), x + CONFIG.cellSize / 2, y + CONFIG.cellSize / 2);
+        ctx.shadowBlur = 0; ctx.font = "11px Trebuchet MS"; ctx.fillStyle = "rgba(255,255,255,.75)";
+        const glyph = territory.terrain === "forest" ? "F" : territory.terrain === "mountains" ? "M" : "";
+        if (glyph) ctx.fillText(glyph, x + CONFIG.cellSize - 9, y + 9);
+      }
+      baseColor(state, territory, visible) {
+        if (!visible) return "#151c29";
+        if (territory.terrain === "water") return "#264c80";
+        if (territory.ownerId === -1) return CONFIG.neutralColor;
+        return state.players[territory.ownerId].color;
+      }
+      drawOrders(ctx, state) {
+        state.queuedOrders.forEach((order) => {
+          const from = state.getTerritory(order.fromId), to = state.getTerritory(order.toId);
+          if (!state.visibleIds.has(from.id) && !state.visibleIds.has(to.id)) return;
+          ctx.strokeStyle = order.type === "attack" ? "rgba(255,123,107,.9)" : "rgba(116,225,192,.9)";
+          ctx.lineWidth = 3; ctx.beginPath();
+          ctx.moveTo(from.x * CONFIG.cellSize + CONFIG.cellSize / 2, from.y * CONFIG.cellSize + CONFIG.cellSize / 2);
+          ctx.lineTo(to.x * CONFIG.cellSize + CONFIG.cellSize / 2, to.y * CONFIG.cellSize + CONFIG.cellSize / 2);
+          ctx.stroke(); ctx.lineWidth = 1;
+        });
+      }
+      drawBanner(ctx, text) {
+        ctx.fillStyle = "rgba(3,8,14,.74)";
+        ctx.fillRect(0, this.canvas.height / 2 - 58, this.canvas.width, 116);
+        ctx.fillStyle = "#ffde92"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = 'bold 34px "Palatino Linotype", Georgia, serif';
+        ctx.fillText(text, this.canvas.width / 2, this.canvas.height / 2);
+      }
+    }
+
+    class TurnManager {
+      constructor(state, renderer, ui) {
+        this.state = state; this.renderer = renderer; this.ui = ui; this.busy = false; this.aiSequence = 0;
+      }
+
+      newGame(playerCount) {
+        this.aiSequence += 1; this.busy = false;
+        this.state = new GameState(playerCount);
+        Object.assign(this.state, MapGenerator.generate(CONFIG.width, CONFIG.height, playerCount));
+        this.state.reinforcementsLeft = this.reinforcementFor(this.state.currentPlayer().id);
+        this.state.pushLog(`A new frontier rises for ${playerCount} houses.`);
+        this.sync();
+      }
+
+      handleBoardClick(territoryId) {
+        if (territoryId === null || this.busy || this.state.winnerId !== null) return;
+        const territory = this.state.getTerritory(territoryId), player = this.state.currentPlayer();
+        if (!player.isHuman || !territory || !this.state.visibleIds.has(territoryId)) return;
+        if (this.state.phase === "reinforcement") return void this.placeReinforcement(territory);
+        if (this.state.phase === "order") this.handleOrderClick(territory);
+      }
+
+      placeReinforcement(territory) {
+        if (territory.ownerId !== 0 || this.state.reinforcementsLeft <= 0) return;
+        territory.armies += 1;
+        this.state.reinforcementsLeft -= 1;
+        if (this.state.reinforcementsLeft === 0) {
+          this.state.phase = "order";
+          this.state.pushLog("Aureline Dominion enters the Order phase.");
+        }
+        this.sync();
+      }
+
+      handleOrderClick(territory) {
+        const selected = this.state.selectedTerritoryId === null ? null : this.state.getTerritory(this.state.selectedTerritoryId);
+        if (!selected) return void this.selectTerritory(territory);
+        if (territory.id === selected.id) return void this.clearSelection();
+        if (territory.ownerId === 0 && !selected.neighbors.includes(territory.id)) return void this.selectTerritory(territory);
+        if (!selected.neighbors.includes(territory.id) || territory.ownerId === null) return;
+        this.queueOrder(selected, territory);
+      }
+
+      selectTerritory(territory) {
+        if (territory.ownerId !== 0 || territory.armies < 2 || this.hasQueuedSource(territory.id)) return;
+        this.state.selectedTerritoryId = territory.id;
+        this.state.sendArmies = clamp(this.state.sendArmies, 1, territory.armies - 1);
+        this.sync();
+      }
+
+      clearSelection() { this.state.selectedTerritoryId = null; this.state.sendArmies = 1; this.sync(); }
+      setSendArmies(value) { this.state.sendArmies = Math.max(1, value); this.sync(); }
+      hasQueuedSource(territoryId) { return this.state.queuedOrders.some((order) => order.fromId === territoryId); }
+      reinforcementFor(playerId) { return Math.max(3, Math.floor(this.state.controlledCount(playerId) / 6)); }
+
+      queueOrder(source, target) {
+        const playerId = this.state.currentPlayer().id;
+        if (this.hasQueuedSource(source.id) || source.ownerId !== playerId || source.armies < 2 || !source.neighbors.includes(target.id) || target.ownerId === null) return;
+        const armies = clamp(this.state.sendArmies, 1, source.armies - 1);
+        this.state.queuedOrders.push({ type: target.ownerId === playerId ? "move" : "attack", fromId: source.id, toId: target.id, armies, playerId });
+        this.state.selectedTerritoryId = null; this.state.sendArmies = 1; this.sync();
+      }
+
+      removeOrder(index) {
+        if (this.busy || this.state.phase !== "order" || !this.state.currentPlayer().isHuman) return;
+        this.state.queuedOrders.splice(index, 1);
+        this.sync();
+      }
+
+      resolveTurn(internal = false) {
+        if (this.state.phase !== "order" || this.state.winnerId !== null || (this.busy && !internal)) return;
+        this.state.phase = "resolution";
+        this.state.selectedTerritoryId = null;
+        const player = this.state.currentPlayer();
+        if (!this.state.queuedOrders.length) this.state.pushLog(`${player.name} holds position this turn.`);
+        for (const order of this.state.queuedOrders) {
+          const target = this.state.getTerritory(order.toId);
+          const mode = order.type === "attack" && target.ownerId === order.playerId ? "move" : order.type;
+          this.state.pushLog(mode === "move" ? CombatResolver.resolveMove(order, this.state) : CombatResolver.resolveAttack(order, this.state));
+          this.updateEliminations();
+          if (this.checkVictory()) break;
+        }
+        this.state.queuedOrders = [];
+        this.sync();
+        if (this.state.winnerId === null) this.advanceTurn();
+      }
+
+      advanceTurn() {
+        const previousIndex = this.state.currentPlayerIndex;
+        let nextIndex = previousIndex;
+        do nextIndex = (nextIndex + 1) % this.state.players.length;
+        while (this.state.players[nextIndex].eliminated);
+        if (nextIndex <= previousIndex) this.state.round += 1;
+        this.state.currentPlayerIndex = nextIndex;
+        this.state.phase = "reinforcement";
+        this.state.reinforcementsLeft = this.reinforcementFor(this.state.currentPlayer().id);
+        this.state.selectedTerritoryId = null; this.state.sendArmies = 1; this.state.queuedOrders = [];
+        this.sync();
+        this.maybeRunAi();
+      }
+
+      computeVisibility() {
+        const human = this.state.players[0];
+        if (!human || human.eliminated || this.state.winnerId !== null) {
+          this.state.visibleIds = new Set(this.state.territories.map((territory) => territory.id));
+          return;
+        }
+        const visible = new Set();
+        this.state.playerTerritories(0).forEach((territory) => {
+          visible.add(territory.id);
+          territory.neighbors.forEach((neighborId) => visible.add(neighborId));
+        });
+        this.state.visibleIds = visible;
+      }
+
+      updateEliminations() {
+        this.state.players.forEach((player) => {
+          const alive = this.state.controlledCount(player.id) > 0;
+          if (!alive && !player.eliminated) {
+            player.eliminated = true;
+            this.state.pushLog(`${player.name} is eliminated.`);
+          }
+        });
+      }
+
+      checkVictory() {
+        const passable = this.state.territories.filter((territory) => territory.ownerId !== null);
+        if (!passable.length) return false;
+        const firstOwner = passable[0].ownerId;
+        if (firstOwner >= 0 && passable.every((territory) => territory.ownerId === firstOwner)) {
+          this.state.winnerId = firstOwner;
+          this.state.pushLog(`${this.state.players[firstOwner].name} controls the entire world.`);
+          return true;
+        }
+        return false;
+      }
+
+      async maybeRunAi() {
+        const player = this.state.currentPlayer();
+        if (!player || player.isHuman || this.state.winnerId !== null) return;
+        const token = ++this.aiSequence;
+        this.busy = true;
+        await this.pause(260);
+        if (!this.aiValid(token, player.id)) return;
+        this.aiReinforce(player.id);
+        this.sync();
+        await this.pause(320);
+        if (!this.aiValid(token, player.id)) return;
+        this.state.phase = "order";
+        this.state.queuedOrders = this.aiPlanOrders(player.id);
+        this.sync();
+        await this.pause(420);
+        if (!this.aiValid(token, player.id)) return;
+        this.busy = false;
+        this.resolveTurn(true);
+      }
+
+      aiValid(token, playerId) {
+        const current = this.state.currentPlayer();
+        return token === this.aiSequence && current && current.id === playerId && !current.isHuman && this.state.winnerId === null;
+      }
+
+      aiReinforce(playerId) {
+        const total = this.state.reinforcementsLeft;
+        for (let i = 0; i < total; i += 1) {
+          const target = this.pickWeakestTerritory(playerId, true) || this.pickWeakestTerritory(playerId, false);
+          if (!target) break;
+          target.armies += 1;
+        }
+        this.state.reinforcementsLeft = 0;
+        this.state.pushLog(`${this.state.players[playerId].name} reinforces the frontier with ${total} armies.`);
+      }
+
+      aiPlanOrders(playerId) {
+        const orders = [], used = new Set();
+        const owned = [...this.state.playerTerritories(playerId)].sort((a, b) => b.armies - a.armies);
+        for (const territory of owned) {
+          if (orders.length >= CONFIG.maxAiOrders) break;
+          if (territory.armies < 2 || used.has(territory.id)) continue;
+          const enemies = territory.neighbors
+            .map((id) => this.state.getTerritory(id))
+            .filter((neighbor) => neighbor.ownerId !== playerId)
+            .sort((a, b) => (a.armies * CONFIG.terrainDefense[a.terrain]) - (b.armies * CONFIG.terrainDefense[b.terrain]));
+          if (!enemies.length) continue;
+          const target = enemies[0], armies = territory.armies - 1;
+          const effective = CombatResolver.effectiveEntryForce(armies, target.terrain);
+          const threshold = target.armies * CONFIG.terrainDefense[target.terrain] * 1.1;
+          if (effective > threshold) {
+            orders.push({ type: "attack", fromId: territory.id, toId: target.id, armies, playerId });
+            used.add(territory.id);
+          }
+        }
+        const borders = this.borderTerritories(playerId).sort((a, b) => a.armies - b.armies);
+        if (!borders.length) return orders;
+        for (const territory of owned) {
+          if (orders.length >= CONFIG.maxAiOrders) break;
+          if (used.has(territory.id) || territory.armies < 4 || this.isBorder(territory, playerId)) continue;
+          const nextStep = this.findOwnedStep(playerId, territory.id, borders[0].id);
+          if (nextStep === null) continue;
+          const armies = Math.floor(territory.armies / 2);
+          if (territory.armies - armies < 1) continue;
+          orders.push({ type: "move", fromId: territory.id, toId: nextStep, armies, playerId });
+          used.add(territory.id);
+        }
+        return orders;
+      }
+
+      borderTerritories(playerId) { return this.state.playerTerritories(playerId).filter((territory) => this.isBorder(territory, playerId)); }
+      isBorder(territory, playerId) { return territory.neighbors.some((neighborId) => this.state.getTerritory(neighborId).ownerId !== playerId); }
+      pickWeakestTerritory(playerId, borderOnly) {
+        const pool = borderOnly ? this.borderTerritories(playerId) : this.state.playerTerritories(playerId);
+        return [...pool].sort((a, b) => a.armies - b.armies)[0] || null;
+      }
+
+      findOwnedStep(playerId, startId, targetId) {
+        if (startId === targetId) return null;
+        const queue = [startId], seen = new Set([startId]), previous = new Map();
+        while (queue.length) {
+          const id = queue.shift();
+          if (id === targetId) break;
+          this.state.getTerritory(id).neighbors.forEach((neighborId) => {
+            if (seen.has(neighborId) || this.state.getTerritory(neighborId).ownerId !== playerId) return;
+            seen.add(neighborId);
+            previous.set(neighborId, id);
+            queue.push(neighborId);
+          });
+        }
+        if (!seen.has(targetId)) return null;
+        let step = targetId;
+        while (previous.get(step) !== startId) {
+          step = previous.get(step);
+          if (step === undefined) return null;
+        }
+        return step;
+      }
+
+      pause(ms) { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
+      sync() { this.computeVisibility(); this.renderer.render(this.state); this.renderUi(); }
+
+      renderUi() {
+        const player = this.state.currentPlayer();
+        this.ui.roundValue.textContent = this.state.round;
+        this.ui.phaseValue.textContent = cap(this.state.phase);
+        this.ui.reinforcementValue.textContent = this.state.phase === "reinforcement" ? this.state.reinforcementsLeft : 0;
+        this.ui.playerValue.innerHTML = `<span class="player-pill"><i class="dot" style="background:${player.color}"></i>${player.name}${player.isHuman ? " (You)" : " (AI)"}</span>`;
+        this.renderSelection();
+        this.ui.playerList.innerHTML = this.state.players.map((playerItem) => {
+          const status = playerItem.eliminated ? "Eliminated" : `${this.state.controlledCount(playerItem.id)} territories`;
+          return `<li><span class="player-pill"><i class="dot" style="background:${playerItem.color}"></i>${playerItem.name}${playerItem.isHuman ? " (You)" : ""}</span><span class="muted">${status}</span></li>`;
+        }).join("");
+        this.ui.queueList.innerHTML = this.state.queuedOrders.length ? this.state.queuedOrders.map((order, index) => {
+          const from = this.state.getTerritory(order.fromId), to = this.state.getTerritory(order.toId);
+          const remove = this.state.currentPlayer().isHuman && this.state.phase === "order" ? `<button type="button" data-remove="${index}">Remove</button>` : "";
+          return `<li>${remove}${cap(order.type)} ${order.armies} from [${from.x + 1},${from.y + 1}] to [${to.x + 1},${to.y + 1}]</li>`;
+        }).join("") : `<li class="muted">No orders queued.</li>`;
+        this.ui.logList.innerHTML = this.state.combatLog.map((entry) => `<li>${entry}</li>`).join("");
+        this.ui.resolveBtn.disabled = this.busy || this.state.winnerId !== null || !player.isHuman || this.state.phase !== "order";
+        this.ui.clearBtn.disabled = this.busy || this.state.selectedTerritoryId === null;
+      }
+
+      renderSelection() {
+        const territory = this.state.selectedTerritoryId === null ? null : this.state.getTerritory(this.state.selectedTerritoryId);
+        const items = territory ? [
+          ["Territory", `[${territory.x + 1},${territory.y + 1}]`],
+          ["Terrain", territory.terrain],
+          ["Owner", territory.ownerId === 0 ? "Aureline Dominion" : this.state.players[territory.ownerId]?.name || "Neutral"],
+          ["Armies", territory.armies]
+        ] : [
+          ["Territory", "None"],
+          ["Terrain", "Select your land"],
+          ["Owner", "Visible friendly territory"],
+          ["Armies", "-"]
+        ];
+        this.ui.selectionInfo.innerHTML = items.map(([label, value]) => `<div class="panel-slot"><span class="label">${label}</span><span class="value">${value}</span></div>`).join("");
+        const max = territory ? Math.max(1, territory.armies - 1) : 1;
+        const disabled = !territory || territory.armies < 2 || this.state.phase !== "order" || this.busy;
+        this.state.sendArmies = clamp(this.state.sendArmies, 1, max);
+        this.ui.armySlider.max = String(max);
+        this.ui.armySlider.value = String(disabled ? 1 : this.state.sendArmies);
+        this.ui.armySlider.disabled = disabled;
+        this.ui.armyValue.textContent = disabled ? "-" : String(this.state.sendArmies);
+      }
+    }
+
+    const ui = {
+      canvas: document.getElementById("board"),
+      playerButtons: document.getElementById("playerButtons"),
+      newGameBtn: document.getElementById("newGameBtn"),
+      roundValue: document.getElementById("roundValue"),
+      phaseValue: document.getElementById("phaseValue"),
+      playerValue: document.getElementById("playerValue"),
+      reinforcementValue: document.getElementById("reinforcementValue"),
+      selectionInfo: document.getElementById("selectionInfo"),
+      armySlider: document.getElementById("armySlider"),
+      armyValue: document.getElementById("armyValue"),
+      playerList: document.getElementById("playerList"),
+      queueList: document.getElementById("queueList"),
+      logList: document.getElementById("logList"),
+      resolveBtn: document.getElementById("resolveBtn"),
+      clearBtn: document.getElementById("clearBtn")
+    };
+
+    const renderer = new Renderer(ui.canvas);
+    const manager = new TurnManager(new GameState(3), renderer, ui);
+    let selectedPlayerCount = 3;
+
+    ui.playerButtons.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-count]");
+      if (!button) return;
+      selectedPlayerCount = Number(button.dataset.count);
+      [...ui.playerButtons.querySelectorAll("button")].forEach((item) => item.classList.toggle("active", item === button));
+    });
+    ui.newGameBtn.addEventListener("click", () => manager.newGame(selectedPlayerCount));
+    ui.canvas.addEventListener("click", (event) => manager.handleBoardClick(renderer.territoryFromEvent(event, manager.state)));
+    ui.armySlider.addEventListener("input", () => manager.setSendArmies(Number(ui.armySlider.value)));
+    ui.resolveBtn.addEventListener("click", () => manager.resolveTurn());
+    ui.clearBtn.addEventListener("click", () => manager.clearSelection());
+    ui.queueList.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-remove]");
+      if (button) manager.removeOrder(Number(button.dataset.remove));
+    });
+
+    window.__ASCENDANCY__ = { manager, renderer, ui, get state() { return manager.state; } };
+    manager.newGame(selectedPlayerCount);
+  </script>
+</body>
+</html>
