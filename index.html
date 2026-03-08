@@ -141,12 +141,24 @@
       oceanShallow: "#163656",
       terrainTint: { plains: "rgba(245,215,145,.13)", forest: "rgba(34,91,55,.34)", mountains: "rgba(171,177,188,.4)" },
       fogFill: "rgba(8,12,20,.24)",
+      borderJitter: 16,
       names: ["Aureline Dominion", "Crimson Reach", "Verdant League", "Duskwind Pact"]
     };
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
     const cap = (text) => text[0].toUpperCase() + text.slice(1);
     const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
     const rand = (min, max) => min + Math.random() * (max - min);
+    const pointInPolygon = (point, polygon) => {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+        const xi = polygon[i].x, yi = polygon[i].y;
+        const xj = polygon[j].x, yj = polygon[j].y;
+        const intersects = ((yi > point.y) !== (yj > point.y)) &&
+          (point.x < ((xj - xi) * (point.y - yi)) / ((yj - yi) || 1e-9) + xi);
+        if (intersects) inside = !inside;
+      }
+      return inside;
+    };
 
     class Territory {
       constructor(id, x, y, name, terrain, polygon) {
@@ -201,18 +213,20 @@
           const profile = this.createProfile();
           const points = this.sampleNodes(profile);
           if (!points) continue;
-          const polygons = this.buildVoronoi(points);
-          if (!polygons) continue;
+          const basePolygons = this.buildVoronoi(points);
+          if (!basePolygons) continue;
           const territories = points.map((point, id) => new Territory(
             id,
             point.x,
             point.y,
             point.name,
             this.assignTerrain(point, profile),
-            polygons[id]
+            basePolygons[id]
           ));
           this.buildNeighbors(territories, profile);
           if (!this.isConnected(territories)) continue;
+          const polygons = this.deformPolygons(basePolygons, profile);
+          polygons.forEach((polygon, id) => { territories[id].polygon = polygon; });
           const seeds = this.chooseSeeds(territories, playerCount);
           const clusters = seeds ? this.growClusters(seeds, territories) : null;
           if (!clusters) continue;
@@ -230,16 +244,21 @@
 
       createProfile() {
         const drift = (amount) => rand(-amount, amount);
+        const seed = Array.from({ length: 6 }, () => Math.random() * Math.PI * 2);
+        const continents = [
+          { cx: 150 + drift(16), cy: 205 + drift(18), rx: 108 + drift(10), ry: 118 + drift(12) },
+          { cx: 198 + drift(18), cy: 525 + drift(20), rx: 82 + drift(8), ry: 146 + drift(12) },
+          { cx: 336 + drift(14), cy: 198 + drift(12), rx: 72 + drift(6), ry: 55 + drift(5) },
+          { cx: 396 + drift(16), cy: 394 + drift(18), rx: 95 + drift(8), ry: 148 + drift(14) },
+          { cx: 568 + drift(18), cy: 214 + drift(15), rx: 146 + drift(14), ry: 110 + drift(10) },
+          { cx: 613 + drift(16), cy: 560 + drift(12), rx: 94 + drift(8), ry: 66 + drift(6) }
+        ].map((continent, index) => ({
+          ...continent,
+          polygon: this.createLandmass(continent, seed[index % seed.length] + index * 0.73)
+        }));
         return {
-          seed: Array.from({ length: 6 }, () => Math.random() * Math.PI * 2),
-          continents: [
-            { cx: 150 + drift(16), cy: 205 + drift(18), rx: 108 + drift(10), ry: 118 + drift(12) },
-            { cx: 198 + drift(18), cy: 525 + drift(20), rx: 82 + drift(8), ry: 146 + drift(12) },
-            { cx: 336 + drift(14), cy: 198 + drift(12), rx: 72 + drift(6), ry: 55 + drift(5) },
-            { cx: 396 + drift(16), cy: 394 + drift(18), rx: 95 + drift(8), ry: 148 + drift(14) },
-            { cx: 568 + drift(18), cy: 214 + drift(15), rx: 146 + drift(14), ry: 110 + drift(10) },
-            { cx: 613 + drift(16), cy: 560 + drift(12), rx: 94 + drift(8), ry: 66 + drift(6) }
-          ],
+          seed,
+          continents,
           bridges: [
             { x1: 205 + drift(6), y1: 308 + drift(8), x2: 222 + drift(6), y2: 372 + drift(10), r: 22 },
             { x1: 245 + drift(10), y1: 170 + drift(8), x2: 300 + drift(8), y2: 152 + drift(6), r: 18 },
@@ -257,15 +276,28 @@
         };
       },
 
-      pointInWorld(profile, x, y) {
-        return profile.continents.some((continent) => this.insideEllipse(x, y, continent)) ||
-          profile.bridges.some((bridge) => this.pointToSegmentDistance(x, y, bridge) <= bridge.r);
+      createLandmass(spec, phase) {
+        const points = [];
+        const count = 28;
+        for (let i = 0; i < count; i += 1) {
+          const angle = (i / count) * Math.PI * 2;
+          const wobble = 1 +
+            Math.sin(angle * 3 + phase) * 0.16 +
+            Math.cos(angle * 5 - phase * 0.9) * 0.09 +
+            Math.sin(angle * 7 + phase * 1.4) * 0.05;
+          const radialX = spec.rx * wobble;
+          const radialY = spec.ry * (1 + Math.cos(angle * 4 + phase * 0.5) * 0.08);
+          points.push({
+            x: spec.cx + Math.cos(angle) * radialX + Math.sin(angle * 2 + phase) * 6,
+            y: spec.cy + Math.sin(angle) * radialY + Math.cos(angle * 3 - phase) * 5
+          });
+        }
+        return points;
       },
 
-      insideEllipse(x, y, ellipse) {
-        const dx = (x - ellipse.cx) / ellipse.rx;
-        const dy = (y - ellipse.cy) / ellipse.ry;
-        return dx * dx + dy * dy <= 1;
+      pointInWorld(profile, x, y) {
+        return profile.continents.some((continent) => pointInPolygon({ x, y }, continent.polygon)) ||
+          profile.bridges.some((bridge) => this.pointToSegmentDistance(x, y, bridge) <= bridge.r);
       },
 
       pointToSegmentDistance(x, y, segment) {
@@ -401,6 +433,78 @@
         });
         if (cleaned.length > 2 && dist(cleaned[0], cleaned[cleaned.length - 1]) < 1) cleaned.pop();
         return cleaned;
+      },
+
+      deformPolygons(polygons, profile) {
+        const edgeCache = new Map();
+        return polygons.map((polygon) => {
+          const shaped = [];
+          for (let i = 0; i < polygon.length; i += 1) {
+            const start = polygon[i];
+            const end = polygon[(i + 1) % polygon.length];
+            const edge = this.getBorderEdge(start, end, edgeCache, profile);
+            if (!shaped.length) shaped.push(edge[0]);
+            shaped.push(...edge.slice(1));
+          }
+          return this.simplifyPolygon(shaped);
+        });
+      },
+
+      getBorderEdge(start, end, edgeCache, profile) {
+        const key = this.edgeKey(start, end);
+        let edge = edgeCache.get(key);
+        if (!edge) {
+          edge = this.createBorderEdge(start, end, key, profile);
+          edgeCache.set(key, edge);
+        }
+        return dist(start, edge[0]) < dist(start, edge[edge.length - 1]) ? edge : [...edge].reverse();
+      },
+
+      edgeKey(a, b) {
+        const serialize = (point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`;
+        const first = serialize(a);
+        const second = serialize(b);
+        return first < second ? `${first}|${second}` : `${second}|${first}`;
+      },
+
+      createBorderEdge(start, end, key, profile) {
+        const length = dist(start, end);
+        if (length < 26) return [start, end];
+        const steps = clamp(Math.round(length / 26), 2, 6);
+        const dx = (end.x - start.x) / length;
+        const dy = (end.y - start.y) / length;
+        const nx = -dy;
+        const ny = dx;
+        const hash = this.hashString(key);
+        const amplitude = Math.min(CONFIG.borderJitter, length * 0.14);
+        const points = [start];
+        for (let i = 1; i < steps; i += 1) {
+          const t = i / steps;
+          const midX = start.x + (end.x - start.x) * t;
+          const midY = start.y + (end.y - start.y) * t;
+          const taper = Math.pow(Math.sin(Math.PI * t), 0.9);
+          const wave = Math.sin(hash * 0.0013 + t * Math.PI * 2) + Math.cos(hash * 0.0007 + t * Math.PI * 4) * 0.45;
+          const drift = Math.sin(hash * 0.0011 + t * Math.PI * 3) * amplitude * 0.16 * taper;
+          const offset = wave * amplitude * 0.55 * taper;
+          let x = midX + nx * offset + dx * drift;
+          let y = midY + ny * offset + dy * drift;
+          if (!this.pointInWorld(profile, x, y)) {
+            x = midX + nx * offset * 0.35;
+            y = midY + ny * offset * 0.35;
+          }
+          points.push({ x, y });
+        }
+        points.push(end);
+        return points;
+      },
+
+      hashString(text) {
+        let hash = 2166136261;
+        for (let i = 0; i < text.length; i += 1) {
+          hash ^= text.charCodeAt(i);
+          hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0;
       },
 
       buildNeighbors(territories, profile) {
@@ -553,7 +657,7 @@
         const x = ((event.clientX - rect.left) / rect.width) * this.canvas.width;
         const y = ((event.clientY - rect.top) / rect.height) * this.canvas.height;
         if (!state.worldProfile || !MapGenerator.pointInWorld(state.worldProfile, x, y)) return null;
-        const hit = state.territories.find((territory) => this.pointInPolygon({ x, y }, territory.polygon));
+        const hit = state.territories.find((territory) => pointInPolygon({ x, y }, territory.polygon));
         return hit ? hit.id : null;
       }
 
@@ -687,8 +791,9 @@
       traceWorldPath(ctx, profile) {
         ctx.beginPath();
         profile.continents.forEach((continent) => {
-          ctx.moveTo(continent.cx + continent.rx, continent.cy);
-          ctx.ellipse(continent.cx, continent.cy, continent.rx, continent.ry, 0, 0, Math.PI * 2);
+          ctx.moveTo(continent.polygon[0].x, continent.polygon[0].y);
+          for (let i = 1; i < continent.polygon.length; i += 1) ctx.lineTo(continent.polygon[i].x, continent.polygon[i].y);
+          ctx.closePath();
         });
         profile.bridges.forEach((bridge) => this.traceCapsule(ctx, bridge));
       }
@@ -702,18 +807,6 @@
         ctx.arc(bridge.x1, bridge.y1, bridge.r, angle + Math.PI / 2, angle - Math.PI / 2, true);
         ctx.arc(bridge.x2, bridge.y2, bridge.r, angle - Math.PI / 2, angle + Math.PI / 2, true);
         ctx.closePath();
-      }
-
-      pointInPolygon(point, polygon) {
-        let inside = false;
-        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
-          const xi = polygon[i].x, yi = polygon[i].y;
-          const xj = polygon[j].x, yj = polygon[j].y;
-          const intersects = ((yi > point.y) !== (yj > point.y)) &&
-            (point.x < ((xj - xi) * (point.y - yi)) / ((yj - yi) || 1e-9) + xi);
-          if (intersects) inside = !inside;
-        }
-        return inside;
       }
     }
 
