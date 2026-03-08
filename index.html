@@ -43,6 +43,7 @@
     .slider-wrap{margin-top:12px;padding:12px;border-radius:16px;background:linear-gradient(180deg,rgba(28,43,67,.84),rgba(17,28,45,.78));border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
     input[type="range"]{width:100%;accent-color:#ffce61}
     .button-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+    .button-row.tight{margin-top:10px}
     .player-list,.queue-list,.log-list{list-style:none;padding:0;margin:0;display:grid;gap:8px}
     .player-list li,.queue-list li,.log-list li{padding:10px 12px;border-radius:14px;background:linear-gradient(180deg,rgba(28,43,67,.82),rgba(18,30,46,.74));border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
     .player-list li{display:flex;justify-content:space-between;align-items:center;gap:12px}
@@ -52,9 +53,16 @@
     .log-list::-webkit-scrollbar-thumb{background:rgba(255,210,108,.35);border-radius:999px}
     .log-list::-webkit-scrollbar-track{background:rgba(255,255,255,.04);border-radius:999px}
     .muted{color:var(--muted)}
+    .hidden{display:none!important}
+    .field{display:grid;gap:6px}
+    .field input,.field select,.map-json{width:100%;background:linear-gradient(180deg,rgba(10,17,28,.95),rgba(18,30,46,.86));color:var(--text);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 12px;font:inherit;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+    .editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .map-json{min-height:170px;resize:vertical;font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;font-size:.84rem;line-height:1.4}
+    .editor-note{margin:10px 0 0;font-size:.92rem}
     .instructions{margin-top:18px;padding:18px 20px;line-height:1.65}
     .instructions ol{margin:8px 0 0 18px;padding:0}
     @media (max-width:1050px){.playfield{grid-template-columns:1fr}}
+    @media (max-width:680px){.editor-grid,.stat-grid,.selection-grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -66,6 +74,12 @@
       </div>
       <div class="card">
         <h2>New Campaign</h2>
+        <div class="setup" style="margin-bottom:12px">
+          <div class="segmented" id="modeButtons">
+            <button type="button" data-mode="play" class="active">Play Mode</button>
+            <button type="button" data-mode="editor">Map Editor</button>
+          </div>
+        </div>
         <div class="setup">
           <div class="segmented" id="playerButtons">
             <button type="button" data-count="2">2 Players</button>
@@ -92,10 +106,10 @@
         <section class="card">
           <h2>Turn Status</h2>
           <div class="stat-grid">
-            <div class="panel-slot"><span class="label">Round</span><span class="value" id="roundValue">1</span></div>
-            <div class="panel-slot"><span class="label">Phase</span><span class="value" id="phaseValue">Reinforcement</span></div>
-            <div class="panel-slot"><span class="label">Active House</span><span class="value" id="playerValue"></span></div>
-            <div class="panel-slot"><span class="label">Reinforcements</span><span class="value" id="reinforcementValue">0</span></div>
+            <div class="panel-slot"><span class="label" id="roundLabel">Round</span><span class="value" id="roundValue">1</span></div>
+            <div class="panel-slot"><span class="label" id="phaseLabel">Phase</span><span class="value" id="phaseValue">Reinforcement</span></div>
+            <div class="panel-slot"><span class="label" id="playerLabel">Active House</span><span class="value" id="playerValue"></span></div>
+            <div class="panel-slot"><span class="label" id="reinforcementLabel">Reinforcements</span><span class="value" id="reinforcementValue">0</span></div>
           </div>
           <div class="button-row">
             <button type="button" class="action primary" id="resolveBtn">Resolve Turn</button>
@@ -113,8 +127,49 @@
           </div>
         </section>
 
+        <section class="card hidden" id="editorCard">
+          <h2>Map Editor</h2>
+          <div class="editor-grid">
+            <label class="field">
+              <span class="label">Country Name</span>
+              <input id="editorName" type="text" maxlength="32" placeholder="Select a country">
+            </label>
+            <label class="field">
+              <span class="label">Terrain</span>
+              <select id="editorTerrain">
+                <option value="plains">Plains</option>
+                <option value="forest">Forest</option>
+                <option value="mountains">Mountains</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="label">Owner</span>
+              <select id="editorOwner"></select>
+            </label>
+            <label class="field">
+              <span class="label">Armies</span>
+              <input id="editorArmies" type="number" min="0" max="99" value="1">
+            </label>
+          </div>
+          <div class="button-row tight">
+            <button type="button" class="action secondary" id="seedMapBtn">Auto Seed Houses</button>
+            <button type="button" class="action ghost" id="addCountryBtn">Add Country</button>
+            <button type="button" class="action ghost" id="deleteCountryBtn">Delete Country</button>
+            <button type="button" class="action primary" id="playMapBtn">Play This Map</button>
+          </div>
+          <label class="field" style="margin-top:12px">
+            <span class="label">Map JSON</span>
+            <textarea id="mapJson" class="map-json" spellcheck="false"></textarea>
+          </label>
+          <div class="button-row tight">
+            <button type="button" class="action secondary" id="exportMapBtn">Export JSON</button>
+            <button type="button" class="action ghost" id="importMapBtn">Load JSON</button>
+          </div>
+          <p class="muted editor-note" id="editorHint">Select a country to edit it. Drag a selected country to reshape borders, or arm Add Country and click open land to create one.</p>
+        </section>
+
         <section class="card"><h2>Houses</h2><ul class="player-list" id="playerList"></ul></section>
-        <section class="card"><h2>Queued Orders</h2><ul class="queue-list" id="queueList"></ul></section>
+        <section class="card" id="queueCard"><h2>Queued Orders</h2><ul class="queue-list" id="queueList"></ul></section>
         <section class="card"><h2>Campaign Log</h2><ul class="log-list" id="logList"></ul></section>
       </aside>
     </div>
@@ -126,6 +181,7 @@
         <li>In Order phase, click one of your countries, choose how many armies to send, then click a bordering country to queue a move or attack.</li>
         <li>Each territory may issue one outgoing order per turn. Click Resolve Turn to process every queued action in order.</li>
         <li>Forest entry removes 1 committed army, mountains boost defenders, and oceans create impassable gaps between borders.</li>
+        <li>Switch to Map Editor to rename countries, change terrain or owners, drag country centers, add or remove countries, and import or export layouts as JSON.</li>
         <li>You only see details around your holdings, but distant country silhouettes stay visible so you can read the world. Conquer every country to achieve Ascendancy.</li>
       </ol>
     </section>
@@ -155,6 +211,7 @@
     const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
     const rand = (min, max) => min + Math.random() * (max - min);
     const lerp = (a, b, t) => a + (b - a) * t;
+    const cloneJson = (value) => JSON.parse(JSON.stringify(value));
     const hexToRgb = (hex) => {
       let value = hex.replace("#", "");
       if (value.length === 3) value = value.split("").map((part) => part + part).join("");
@@ -236,33 +293,77 @@
           const profile = this.createProfile();
           const points = this.sampleNodes(profile);
           if (!points) continue;
-          const basePolygons = this.buildVoronoi(points);
-          if (!basePolygons) continue;
-          const territories = points.map((point, id) => new Territory(
-            id,
-            point.x,
-            point.y,
-            point.name,
-            this.assignTerrain(point, profile),
-            basePolygons[id]
-          ));
-          this.buildNeighbors(territories, profile);
-          if (!this.isConnected(territories)) continue;
-          const polygons = this.deformPolygons(basePolygons, profile);
-          polygons.forEach((polygon, id) => { territories[id].polygon = polygon; });
-          const seeds = this.chooseSeeds(territories, playerCount);
-          const clusters = seeds ? this.growClusters(seeds, territories) : null;
-          if (!clusters) continue;
-          clusters.forEach((cluster, playerId) => {
-            cluster.forEach((id) => {
-              territories[id].ownerId = playerId;
-              territories[id].armies = 2;
-            });
-            territories[seeds[playerId]].armies = 4;
-          });
-          return { territories, worldProfile: profile };
+          const world = this.buildWorldFromLayout(profile, points, playerCount, true);
+          if (world) return world;
         }
         throw new Error("Unable to generate a valid map.");
+      },
+
+      buildWorldFromLayout(profile, points, playerCount = 3, autoSeed = false) {
+        if (!points.every((point) => this.pointInWorld(profile, point.x, point.y))) return null;
+        const basePolygons = this.buildVoronoi(points);
+        if (!basePolygons) return null;
+        const territories = points.map((point, id) => new Territory(
+          id,
+          point.x,
+          point.y,
+          point.name,
+          point.terrain || this.assignTerrain(point, profile),
+          basePolygons[id]
+        ));
+        this.buildNeighbors(territories, profile);
+        if (!territories.length || !this.isConnected(territories)) return null;
+        const polygons = this.deformPolygons(basePolygons, profile);
+        polygons.forEach((polygon, id) => { territories[id].polygon = polygon; });
+        territories.forEach((territory, id) => {
+          territory.ownerId = Number.isInteger(points[id].ownerId) ? points[id].ownerId : -1;
+          territory.armies = clamp(Number(points[id].armies) || 1, 1, 99);
+          if (territory.ownerId >= playerCount) territory.ownerId = -1;
+        });
+        if (autoSeed) this.seedTerritories(territories, playerCount);
+        return { territories, worldProfile: cloneJson(profile) };
+      },
+
+      buildWorldFromTemplate(template) {
+        if (!template || !Array.isArray(template.points) || !template.points.length || !template.profile) return null;
+        const playerCount = clamp(Number(template.playerCount) || 3, 2, 4);
+        const profile = cloneJson(template.profile);
+        const points = template.points.map((point, index) => {
+          const x = clamp(Number(point.x) || 0, 24, CONFIG.mapWidth - 24);
+          const y = clamp(Number(point.y) || 0, 24, CONFIG.mapHeight - 24);
+          const name = String(point.name || `March ${index + 1}`).slice(0, 32) || `March ${index + 1}`;
+          return {
+            x,
+            y,
+            name,
+            terrain: ["plains", "forest", "mountains"].includes(point.terrain) ? point.terrain : this.assignTerrain({ x, y }, profile),
+            ownerId: Number.isInteger(point.ownerId) ? point.ownerId : -1,
+            armies: clamp(Number(point.armies) || 1, 0, 99)
+          };
+        });
+        const world = this.buildWorldFromLayout(profile, points, playerCount, false);
+        return world ? {
+          ...world,
+          playerCount
+        } : null;
+      },
+
+      seedTerritories(territories, playerCount) {
+        territories.forEach((territory) => {
+          territory.ownerId = -1;
+          territory.armies = 1;
+        });
+        const seeds = this.chooseSeeds(territories, playerCount);
+        const clusters = seeds ? this.growClusters(seeds, territories) : null;
+        if (!clusters) return false;
+        clusters.forEach((cluster, playerId) => {
+          cluster.forEach((id) => {
+            territories[id].ownerId = playerId;
+            territories[id].armies = 2;
+          });
+          territories[seeds[playerId]].armies = 4;
+        });
+        return true;
       },
 
       createProfile() {
@@ -684,10 +785,20 @@
       }
 
       territoryFromEvent(event, state) {
-        const rect = this.canvas.getBoundingClientRect();
-        const x = ((event.clientX - rect.left) / rect.width) * this.viewWidth;
-        const y = ((event.clientY - rect.top) / rect.height) * this.viewHeight;
+        const { x, y } = this.canvasPoint(event);
         if (!state.worldProfile || !MapGenerator.pointInWorld(state.worldProfile, x, y)) return null;
+        return this.territoryAtPoint(x, y, state);
+      }
+
+      canvasPoint(event) {
+        const rect = this.canvas.getBoundingClientRect();
+        return {
+          x: ((event.clientX - rect.left) / rect.width) * this.viewWidth,
+          y: ((event.clientY - rect.top) / rect.height) * this.viewHeight
+        };
+      }
+
+      territoryAtPoint(x, y, state) {
         const hit = state.territories.find((territory) => pointInPolygon({ x, y }, territory.polygon));
         return hit ? hit.id : null;
       }
@@ -1063,25 +1174,116 @@
         this.ui = ui;
         this.busy = false;
         this.aiSequence = 0;
+        this.mode = "play";
+        this.dragState = null;
+        this.dragMoved = false;
+        this.editorAddMode = false;
       }
 
-      newGame(playerCount) {
+      newGame(playerCount, mode = this.mode) {
+        const world = MapGenerator.generate(playerCount);
+        this.installWorld(world, playerCount, { resetLog: true });
+        this.state.pushLog(`A new world rises for ${playerCount} houses.`);
+        if (mode === "editor") this.prepareEditorState();
+        else this.preparePlayState();
+      }
+
+      installWorld(world, playerCount, options = {}) {
+        const { resetLog = false, selectionId = null } = options;
+        const previousLog = resetLog ? [] : [...this.state.combatLog];
+        const state = new GameState(playerCount);
+        state.territories = world.territories;
+        state.worldProfile = world.worldProfile;
+        state.combatLog = previousLog;
+        state.selectedTerritoryId = selectionId !== null && selectionId < state.territories.length ? selectionId : null;
+        this.state = state;
+      }
+
+      preparePlayState() {
+        this.mode = "play";
         this.aiSequence += 1;
         this.busy = false;
-        this.state = new GameState(playerCount);
-        Object.assign(this.state, MapGenerator.generate(playerCount));
-        this.state.reinforcementsLeft = this.reinforcementFor(this.state.currentPlayer().id);
-        this.state.pushLog(`A new world rises for ${playerCount} houses.`);
+        this.dragState = null;
+        this.dragMoved = false;
+        this.editorAddMode = false;
+        this.state.phase = "reinforcement";
+        this.state.winnerId = null;
+        this.state.round = 1;
+        this.state.sendArmies = 1;
+        this.state.queuedOrders = [];
+        this.state.selectedTerritoryId = null;
+        this.state.players.forEach((player) => { player.eliminated = false; });
+        this.updateEliminations();
+        const firstAlive = this.state.players.findIndex((player) => this.state.controlledCount(player.id) > 0);
+        this.state.currentPlayerIndex = firstAlive >= 0 ? firstAlive : 0;
+        this.state.reinforcementsLeft = firstAlive >= 0 ? this.reinforcementFor(this.state.currentPlayer().id) : 0;
+        this.sync();
+        this.maybeRunAi();
+      }
+
+      prepareEditorState() {
+        this.mode = "editor";
+        this.aiSequence += 1;
+        this.busy = false;
+        this.dragState = null;
+        this.dragMoved = false;
+        this.state.phase = "editor";
+        this.state.winnerId = null;
+        this.state.round = 1;
+        this.state.reinforcementsLeft = 0;
+        this.state.sendArmies = 1;
+        this.state.queuedOrders = [];
+        this.state.players.forEach((player) => { player.eliminated = false; });
         this.sync();
       }
 
+      setMode(mode) {
+        if (mode === this.mode) return this.sync();
+        if (mode === "editor") {
+          this.state.pushLog("Map editor opened.");
+          return this.prepareEditorState();
+        }
+        this.playEditedMap();
+      }
+
       handleBoardClick(territoryId) {
-        if (territoryId === null || this.busy || this.state.winnerId !== null) return;
+        if (territoryId === null || this.busy || this.state.winnerId !== null || this.mode !== "play") return;
         const territory = this.state.getTerritory(territoryId);
         const player = this.state.currentPlayer();
         if (!player.isHuman || !territory || !this.state.visibleIds.has(territoryId)) return;
         if (this.state.phase === "reinforcement") return void this.placeReinforcement(territory);
         if (this.state.phase === "order") this.handleOrderClick(territory);
+      }
+
+      handlePointerDown(point, territoryId) {
+        if (this.mode !== "editor") return;
+        this.dragMoved = false;
+        if (this.editorAddMode || territoryId === null) return;
+        if (this.state.selectedTerritoryId === territoryId) {
+          this.dragState = { territoryId, start: point };
+        }
+      }
+
+      handlePointerMove(point) {
+        if (this.mode !== "editor" || !this.dragState) return;
+        const { territoryId, start } = this.dragState;
+        if (Math.hypot(point.x - start.x, point.y - start.y) < 3) return;
+        if (!this.moveCountry(territoryId, point)) return;
+        this.dragState.start = point;
+        this.dragMoved = true;
+      }
+
+      handlePointerUp(point, territoryId) {
+        if (this.mode === "editor") {
+          const moved = this.dragMoved;
+          this.dragState = null;
+          this.dragMoved = false;
+          if (moved) return;
+          if (this.editorAddMode) return void this.addCountryAt(point);
+          this.state.selectedTerritoryId = territoryId;
+          return void this.sync();
+        }
+        this.handleBoardClick(territoryId);
       }
 
       placeReinforcement(territory) {
@@ -1141,13 +1343,13 @@
       }
 
       removeOrder(index) {
-        if (this.busy || this.state.phase !== "order" || !this.state.currentPlayer().isHuman) return;
+        if (this.busy || this.state.phase !== "order" || !this.state.currentPlayer().isHuman || this.mode !== "play") return;
         this.state.queuedOrders.splice(index, 1);
         this.sync();
       }
 
       resolveTurn(internal = false) {
-        if (this.state.phase !== "order" || this.state.winnerId !== null || (this.busy && !internal)) return;
+        if (this.mode !== "play" || this.state.phase !== "order" || this.state.winnerId !== null || (this.busy && !internal)) return;
         this.state.phase = "resolution";
         this.state.selectedTerritoryId = null;
         const player = this.state.currentPlayer();
@@ -1181,6 +1383,10 @@
       }
 
       computeVisibility() {
+        if (this.mode === "editor") {
+          this.state.visibleIds = new Set(this.state.territories.map((territory) => territory.id));
+          return;
+        }
         const human = this.state.players[0];
         if (!human || human.eliminated || this.state.winnerId !== null) {
           this.state.visibleIds = new Set(this.state.territories.map((territory) => territory.id));
@@ -1216,7 +1422,7 @@
 
       async maybeRunAi() {
         const player = this.state.currentPlayer();
-        if (!player || player.isHuman || this.state.winnerId !== null) return;
+        if (this.mode !== "play" || !player || player.isHuman || this.state.winnerId !== null) return;
         const token = ++this.aiSequence;
         this.busy = true;
         await this.pause(260);
@@ -1236,7 +1442,7 @@
 
       aiValid(token, playerId) {
         const current = this.state.currentPlayer();
-        return token === this.aiSequence && current && current.id === playerId && !current.isHuman && this.state.winnerId === null;
+        return this.mode === "play" && token === this.aiSequence && current && current.id === playerId && !current.isHuman && this.state.winnerId === null;
       }
 
       aiReinforce(playerId) {
@@ -1327,6 +1533,160 @@
         return new Promise((resolve) => window.setTimeout(resolve, ms));
       }
 
+      serializeMap() {
+        return {
+          playerCount: this.state.players.length,
+          profile: cloneJson(this.state.worldProfile),
+          points: this.state.territories.map((territory) => ({
+            x: territory.x,
+            y: territory.y,
+            name: territory.name,
+            terrain: territory.terrain,
+            ownerId: territory.ownerId,
+            armies: territory.armies
+          }))
+        };
+      }
+
+      updateEditorTerritory(patch) {
+        if (this.mode !== "editor" || this.state.selectedTerritoryId === null) return;
+        const territory = this.state.getTerritory(this.state.selectedTerritoryId);
+        if (!territory) return;
+        if (patch.name !== undefined) territory.name = String(patch.name || "Untitled").slice(0, 32);
+        if (patch.terrain !== undefined && ["plains", "forest", "mountains"].includes(patch.terrain)) territory.terrain = patch.terrain;
+        if (patch.ownerId !== undefined) territory.ownerId = clamp(Number(patch.ownerId) || -1, -1, this.state.players.length - 1);
+        if (patch.armies !== undefined) territory.armies = clamp(Number(patch.armies) || 1, 1, 99);
+        this.sync();
+      }
+
+      isValidEditorPoint(points, ignoreIndex, x, y, profile) {
+        if (!MapGenerator.pointInWorld(profile, x, y)) return false;
+        return points.every((point, index) => index === ignoreIndex || Math.hypot(point.x - x, point.y - y) >= 32);
+      }
+
+      rebuildEditorMap(mutator, selectionId = this.state.selectedTerritoryId, message = null) {
+        const template = this.serializeMap();
+        mutator(template);
+        const world = MapGenerator.buildWorldFromTemplate(template);
+        if (!world) {
+          this.state.pushLog("That edit would break the map layout.");
+          this.sync();
+          return false;
+        }
+        this.installWorld(world, world.playerCount, { resetLog: false, selectionId });
+        this.state.phase = "editor";
+        this.state.reinforcementsLeft = 0;
+        this.state.round = 1;
+        if (message) this.state.pushLog(message);
+        this.sync();
+        return true;
+      }
+
+      moveCountry(territoryId, point) {
+        const template = this.serializeMap();
+        if (!this.isValidEditorPoint(template.points, territoryId, point.x, point.y, template.profile)) return false;
+        return this.rebuildEditorMap((draft) => {
+          draft.points[territoryId].x = point.x;
+          draft.points[territoryId].y = point.y;
+        }, territoryId);
+      }
+
+      toggleAddCountryMode() {
+        if (this.mode !== "editor") return;
+        this.editorAddMode = !this.editorAddMode;
+        this.state.pushLog(this.editorAddMode ? "Add Country armed. Click open land to place a new country." : "Add Country cancelled.");
+        this.sync();
+      }
+
+      addCountryAt(point) {
+        if (this.mode !== "editor") return;
+        const template = this.serializeMap();
+        if (!this.isValidEditorPoint(template.points, -1, point.x, point.y, template.profile)) {
+          this.state.pushLog("Place new countries on open land away from existing capitals.");
+          return this.sync();
+        }
+        const usedNames = new Set(template.points.map((item) => item.name));
+        template.points.push({
+          x: point.x,
+          y: point.y,
+          name: MapGenerator.generateName(template.points.length, template.profile.seed || [0, 1, 2, 3, 4, 5], usedNames),
+          terrain: MapGenerator.assignTerrain(point, template.profile),
+          ownerId: -1,
+          armies: 1
+        });
+        const world = MapGenerator.buildWorldFromTemplate(template);
+        if (!world) {
+          this.state.pushLog("Unable to fit a new country there.");
+          return this.sync();
+        }
+        this.editorAddMode = false;
+        this.installWorld(world, world.playerCount, { resetLog: false, selectionId: world.territories.length - 1 });
+        this.state.phase = "editor";
+        this.state.pushLog("New country added to the map.");
+        this.sync();
+      }
+
+      deleteSelectedCountry() {
+        if (this.mode !== "editor" || this.state.selectedTerritoryId === null || this.state.territories.length <= 8) return;
+        const removeId = this.state.selectedTerritoryId;
+        const label = this.state.getTerritory(removeId)?.name || "country";
+        this.rebuildEditorMap((draft) => {
+          draft.points.splice(removeId, 1);
+        }, null, `${label} was removed from the map.`);
+      }
+
+      autoSeedMap() {
+        if (this.mode !== "editor") return;
+        const template = this.serializeMap();
+        const world = MapGenerator.buildWorldFromTemplate(template);
+        if (!world || !MapGenerator.seedTerritories(world.territories, this.state.players.length)) {
+          this.state.pushLog("Unable to reseed this layout for all houses.");
+          return this.sync();
+        }
+        this.installWorld(world, world.playerCount, { resetLog: false, selectionId: this.state.selectedTerritoryId });
+        this.state.phase = "editor";
+        this.state.pushLog("Starting territories reseeded across the edited world.");
+        this.sync();
+      }
+
+      canPlayEditedMap() {
+        const living = this.state.players.filter((player) => this.state.controlledCount(player.id) > 0).length;
+        return this.state.controlledCount(0) > 0 && living >= 2;
+      }
+
+      playEditedMap() {
+        if (!this.canPlayEditedMap()) {
+          this.state.pushLog("Editor maps need at least one country for you and one rival house before they can be played.");
+          return this.sync();
+        }
+        this.state.pushLog("Edited world launched as a campaign.");
+        this.preparePlayState();
+      }
+
+      exportMap() {
+        const text = JSON.stringify(this.serializeMap(), null, 2);
+        this.ui.mapJson.value = text;
+        if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).catch(() => {});
+        this.state.pushLog("Map JSON exported.");
+        this.sync();
+      }
+
+      importMap(text) {
+        try {
+          const template = JSON.parse(text);
+          const world = MapGenerator.buildWorldFromTemplate(template);
+          if (!world) throw new Error("invalid-map");
+          this.installWorld(world, world.playerCount, { resetLog: true });
+          this.state.pushLog(`Imported map with ${world.territories.length} countries.`);
+          this.prepareEditorState();
+          return world.playerCount;
+        } catch {
+          this.state.pushLog("Map import failed. Check the JSON structure and try again.");
+          this.sync();
+          return null;
+        }
+      }
+
       sync() {
         this.computeVisibility();
         this.renderer.render(this.state);
@@ -1335,13 +1695,25 @@
 
       renderUi() {
         const player = this.state.currentPlayer();
-        this.ui.roundValue.textContent = this.state.round;
-        this.ui.phaseValue.textContent = cap(this.state.phase);
-        this.ui.reinforcementValue.textContent = this.state.phase === "reinforcement" ? this.state.reinforcementsLeft : 0;
-        this.ui.playerValue.innerHTML = `<span class="player-pill"><i class="dot" style="background:${player.color}"></i>${player.name}${player.isHuman ? " (You)" : " (AI)"}</span>`;
+        const editor = this.mode === "editor";
+        this.ui.newGameBtn.textContent = editor ? "Generate Editable World" : "Generate World";
+        this.ui.roundLabel.textContent = editor ? "Countries" : "Round";
+        this.ui.phaseLabel.textContent = "Phase";
+        this.ui.playerLabel.textContent = editor ? "Editor" : "Active House";
+        this.ui.reinforcementLabel.textContent = editor ? "Houses" : "Reinforcements";
+        this.ui.roundValue.textContent = editor ? this.state.territories.length : this.state.round;
+        this.ui.phaseValue.textContent = editor ? "Map Editor" : cap(this.state.phase);
+        this.ui.reinforcementValue.textContent = editor ? this.state.players.length : (this.state.phase === "reinforcement" ? this.state.reinforcementsLeft : 0);
+        this.ui.playerValue.innerHTML = editor
+          ? `<span class="player-pill"><i class="dot" style="background:#ffd26c"></i>Editing ${this.state.territories.length} countries</span>`
+          : `<span class="player-pill"><i class="dot" style="background:${player.color}"></i>${player.name}${player.isHuman ? " (You)" : " (AI)"}</span>`;
+        [...this.ui.modeButtons.querySelectorAll("button")].forEach((button) => button.classList.toggle("active", button.dataset.mode === this.mode));
+        this.ui.editorCard.classList.toggle("hidden", !editor);
+        this.ui.queueCard.classList.toggle("hidden", editor);
         this.renderSelection();
+        this.renderEditorControls();
         this.ui.playerList.innerHTML = this.state.players.map((playerItem) => {
-          const status = playerItem.eliminated ? "Eliminated" : `${this.state.controlledCount(playerItem.id)} countries`;
+          const status = editor ? `${this.state.controlledCount(playerItem.id)} countries` : (playerItem.eliminated ? "Eliminated" : `${this.state.controlledCount(playerItem.id)} countries`);
           return `<li><span class="player-pill"><i class="dot" style="background:${playerItem.color}"></i>${playerItem.name}${playerItem.isHuman ? " (You)" : ""}</span><span class="muted">${status}</span></li>`;
         }).join("");
         this.ui.queueList.innerHTML = this.state.queuedOrders.length ? this.state.queuedOrders.map((order, index) => {
@@ -1351,26 +1723,58 @@
           return `<li>${remove}${cap(order.type)} ${order.armies} from ${from.name} to ${to.name}</li>`;
         }).join("") : `<li class="muted">No orders queued.</li>`;
         this.ui.logList.innerHTML = this.state.combatLog.map((entry) => `<li>${entry}</li>`).join("");
-        this.ui.resolveBtn.disabled = this.busy || this.state.winnerId !== null || !player.isHuman || this.state.phase !== "order";
+        this.ui.resolveBtn.disabled = editor || this.busy || this.state.winnerId !== null || !player.isHuman || this.state.phase !== "order";
         this.ui.clearBtn.disabled = this.busy || this.state.selectedTerritoryId === null;
+      }
+
+      renderEditorControls() {
+        if (this.mode !== "editor") return;
+        const territory = this.state.selectedTerritoryId === null ? null : this.state.getTerritory(this.state.selectedTerritoryId);
+        this.ui.editorOwner.innerHTML = [`<option value="-1">Neutral Frontier</option>`]
+          .concat(this.state.players.map((player) => `<option value="${player.id}">${player.name}</option>`))
+          .join("");
+        this.ui.editorName.disabled = !territory;
+        this.ui.editorTerrain.disabled = !territory;
+        this.ui.editorOwner.disabled = !territory;
+        this.ui.editorArmies.disabled = !territory;
+        this.ui.editorName.value = territory?.name || "";
+        this.ui.editorTerrain.value = territory?.terrain || "plains";
+        this.ui.editorOwner.value = String(territory?.ownerId ?? -1);
+        this.ui.editorArmies.value = String(territory?.armies ?? 1);
+        this.ui.deleteCountryBtn.disabled = !territory || this.state.territories.length <= 8;
+        this.ui.playMapBtn.disabled = !this.canPlayEditedMap();
+        this.ui.addCountryBtn.classList.toggle("secondary", this.editorAddMode);
+        this.ui.addCountryBtn.classList.toggle("ghost", !this.editorAddMode);
+        this.ui.editorHint.textContent = this.editorAddMode
+          ? "Add Country is armed. Click open land to place a new country."
+          : "Select a country to edit it. Drag a selected country to reshape borders, or arm Add Country and click open land to create one.";
       }
 
       renderSelection() {
         const territory = this.state.selectedTerritoryId === null ? null : this.state.getTerritory(this.state.selectedTerritoryId);
-        const items = territory ? [
-          ["Country", territory.name],
-          ["Terrain", territory.terrain],
-          ["Owner", territory.ownerId === 0 ? "Aureline Dominion" : this.state.players[territory.ownerId]?.name || "Neutral"],
-          ["Armies", territory.armies]
-        ] : [
+        const items = territory ? (
+          this.mode === "editor" ? [
+            ["Country", territory.name],
+            ["Terrain", territory.terrain],
+            ["Owner", territory.ownerId === -1 ? "Neutral" : this.state.players[territory.ownerId]?.name || "Neutral"],
+            ["Armies", territory.armies],
+            ["Position", `${Math.round(territory.x)}, ${Math.round(territory.y)}`],
+            ["Borders", territory.neighbors.length]
+          ] : [
+            ["Country", territory.name],
+            ["Terrain", territory.terrain],
+            ["Owner", territory.ownerId === 0 ? "Aureline Dominion" : this.state.players[territory.ownerId]?.name || "Neutral"],
+            ["Armies", territory.armies]
+          ]
+        ) : [
           ["Country", "None"],
-          ["Terrain", "Select your land"],
-          ["Owner", "Visible friendly country"],
+          ["Terrain", this.mode === "editor" ? "Select any country" : "Select your land"],
+          ["Owner", this.mode === "editor" ? "Edit geometry and starts" : "Visible friendly country"],
           ["Armies", "-"]
         ];
         this.ui.selectionInfo.innerHTML = items.map(([label, value]) => `<div class="panel-slot"><span class="label">${label}</span><span class="value">${value}</span></div>`).join("");
         const max = territory ? Math.max(1, territory.armies - 1) : 1;
-        const disabled = !territory || territory.armies < 2 || this.state.phase !== "order" || this.busy;
+        const disabled = this.mode !== "play" || !territory || territory.armies < 2 || this.state.phase !== "order" || this.busy;
         this.state.sendArmies = clamp(this.state.sendArmies, 1, max);
         this.ui.armySlider.max = String(max);
         this.ui.armySlider.value = String(disabled ? 1 : this.state.sendArmies);
@@ -1381,12 +1785,17 @@
 
     const ui = {
       canvas: document.getElementById("board"),
+      modeButtons: document.getElementById("modeButtons"),
       playerButtons: document.getElementById("playerButtons"),
       newGameBtn: document.getElementById("newGameBtn"),
       roundValue: document.getElementById("roundValue"),
+      roundLabel: document.getElementById("roundLabel"),
       phaseValue: document.getElementById("phaseValue"),
+      phaseLabel: document.getElementById("phaseLabel"),
       playerValue: document.getElementById("playerValue"),
+      playerLabel: document.getElementById("playerLabel"),
       reinforcementValue: document.getElementById("reinforcementValue"),
+      reinforcementLabel: document.getElementById("reinforcementLabel"),
       selectionInfo: document.getElementById("selectionInfo"),
       armySlider: document.getElementById("armySlider"),
       armyValue: document.getElementById("armyValue"),
@@ -1394,27 +1803,78 @@
       queueList: document.getElementById("queueList"),
       logList: document.getElementById("logList"),
       resolveBtn: document.getElementById("resolveBtn"),
-      clearBtn: document.getElementById("clearBtn")
+      clearBtn: document.getElementById("clearBtn"),
+      editorCard: document.getElementById("editorCard"),
+      queueCard: document.getElementById("queueCard"),
+      editorName: document.getElementById("editorName"),
+      editorTerrain: document.getElementById("editorTerrain"),
+      editorOwner: document.getElementById("editorOwner"),
+      editorArmies: document.getElementById("editorArmies"),
+      mapJson: document.getElementById("mapJson"),
+      editorHint: document.getElementById("editorHint"),
+      seedMapBtn: document.getElementById("seedMapBtn"),
+      addCountryBtn: document.getElementById("addCountryBtn"),
+      deleteCountryBtn: document.getElementById("deleteCountryBtn"),
+      playMapBtn: document.getElementById("playMapBtn"),
+      exportMapBtn: document.getElementById("exportMapBtn"),
+      importMapBtn: document.getElementById("importMapBtn")
     };
 
     const renderer = new Renderer(ui.canvas);
     const manager = new TurnManager(new GameState(3), renderer, ui);
     let selectedPlayerCount = 3;
 
+    const syncPlayerButtons = (count) => {
+      selectedPlayerCount = count;
+      [...ui.playerButtons.querySelectorAll("button")].forEach((item) => item.classList.toggle("active", Number(item.dataset.count) === count));
+    };
+
+    ui.modeButtons.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-mode]");
+      if (!button) return;
+      manager.setMode(button.dataset.mode);
+    });
     ui.playerButtons.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-count]");
       if (!button) return;
-      selectedPlayerCount = Number(button.dataset.count);
-      [...ui.playerButtons.querySelectorAll("button")].forEach((item) => item.classList.toggle("active", item === button));
+      syncPlayerButtons(Number(button.dataset.count));
     });
-    ui.newGameBtn.addEventListener("click", () => manager.newGame(selectedPlayerCount));
-    ui.canvas.addEventListener("click", (event) => manager.handleBoardClick(renderer.territoryFromEvent(event, manager.state)));
+    ui.newGameBtn.addEventListener("click", () => manager.newGame(selectedPlayerCount, manager.mode));
+    ui.canvas.addEventListener("pointerdown", (event) => {
+      const point = renderer.canvasPoint(event);
+      manager.handlePointerDown(point, renderer.territoryAtPoint(point.x, point.y, manager.state));
+    });
+    ui.canvas.addEventListener("pointermove", (event) => {
+      const point = renderer.canvasPoint(event);
+      manager.handlePointerMove(point);
+    });
+    ui.canvas.addEventListener("pointerup", (event) => {
+      const point = renderer.canvasPoint(event);
+      manager.handlePointerUp(point, renderer.territoryAtPoint(point.x, point.y, manager.state));
+    });
+    ui.canvas.addEventListener("pointerleave", () => {
+      manager.dragState = null;
+      manager.dragMoved = false;
+    });
     ui.armySlider.addEventListener("input", () => manager.setSendArmies(Number(ui.armySlider.value)));
     ui.resolveBtn.addEventListener("click", () => manager.resolveTurn());
     ui.clearBtn.addEventListener("click", () => manager.clearSelection());
     ui.queueList.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-remove]");
       if (button) manager.removeOrder(Number(button.dataset.remove));
+    });
+    ui.editorName.addEventListener("input", () => manager.updateEditorTerritory({ name: ui.editorName.value }));
+    ui.editorTerrain.addEventListener("change", () => manager.updateEditorTerritory({ terrain: ui.editorTerrain.value }));
+    ui.editorOwner.addEventListener("change", () => manager.updateEditorTerritory({ ownerId: Number(ui.editorOwner.value) }));
+    ui.editorArmies.addEventListener("input", () => manager.updateEditorTerritory({ armies: Number(ui.editorArmies.value) }));
+    ui.seedMapBtn.addEventListener("click", () => manager.autoSeedMap());
+    ui.addCountryBtn.addEventListener("click", () => manager.toggleAddCountryMode());
+    ui.deleteCountryBtn.addEventListener("click", () => manager.deleteSelectedCountry());
+    ui.playMapBtn.addEventListener("click", () => manager.playEditedMap());
+    ui.exportMapBtn.addEventListener("click", () => manager.exportMap());
+    ui.importMapBtn.addEventListener("click", () => {
+      const playerCount = manager.importMap(ui.mapJson.value);
+      if (playerCount) syncPlayerButtons(playerCount);
     });
 
     window.__ASCENDANCY__ = { manager, renderer, ui, get state() { return manager.state; } };
