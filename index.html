@@ -6,48 +6,53 @@
   <title>Ascendancy</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23091018' d='M0 0h64v64H0z'/%3E%3Cpath fill='%23f0bd55' d='M32 6 10 18l22 12 22-12zM18 31l14 8 14-8v13L32 58 18 44z'/%3E%3C/svg%3E">
   <style>
-    :root{--panel:rgba(17,27,43,.86);--panel-soft:rgba(24,37,58,.74);--border:rgba(255,214,138,.24);--text:#f6f1df;--muted:#b7b6ad;--accent:#ffd26c;--shadow:0 24px 48px rgba(0,0,0,.36)}
+    :root{--panel:rgba(13,22,36,.9);--panel-soft:rgba(26,39,60,.76);--panel-strong:rgba(10,17,28,.94);--border:rgba(255,214,138,.22);--border-strong:rgba(255,228,168,.3);--text:#f6f1df;--muted:#c1c0b7;--accent:#ffd26c;--accent-deep:#c78e2d;--shadow:0 28px 64px rgba(0,0,0,.42)}
     *{box-sizing:border-box}
-    body{margin:0;min-height:100vh;color:var(--text);background:radial-gradient(circle at top left,rgba(255,209,108,.14),transparent 28%),radial-gradient(circle at top right,rgba(74,140,175,.14),transparent 28%),linear-gradient(180deg,#172436 0%,#091018 100%);font-family:"Trebuchet MS",Verdana,sans-serif}
-    .shell{max-width:1320px;margin:0 auto;padding:20px}
+    body{margin:0;min-height:100vh;color:var(--text);background:radial-gradient(circle at 14% 10%,rgba(255,210,120,.18),transparent 24%),radial-gradient(circle at 84% 8%,rgba(81,138,184,.16),transparent 22%),radial-gradient(circle at 50% 100%,rgba(19,60,104,.18),transparent 34%),linear-gradient(180deg,#18263a 0%,#0b1220 100%);font-family:"Trebuchet MS",Verdana,sans-serif;position:relative;overflow-x:hidden}
+    body::before{content:"";position:fixed;inset:0;pointer-events:none;background:linear-gradient(120deg,rgba(255,255,255,.03),transparent 28%,transparent 72%,rgba(255,255,255,.02)),repeating-linear-gradient(90deg,transparent 0 119px,rgba(255,255,255,.018) 120px,transparent 121px),linear-gradient(180deg,rgba(255,255,255,.03),transparent 26%);opacity:.55;mix-blend-mode:screen}
+    .shell{max-width:1320px;margin:0 auto;padding:22px}
     .masthead{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin-bottom:18px}
-    h1{margin:0;font-size:clamp(2.2rem,4vw,4rem);letter-spacing:.08em;text-transform:uppercase;font-family:"Palatino Linotype","Book Antiqua",Georgia,serif}
-    .subtitle{margin:8px 0 0;color:var(--muted);max-width:640px;line-height:1.5}
+    h1{margin:0;font-size:clamp(2.2rem,4vw,4rem);letter-spacing:.08em;text-transform:uppercase;font-family:"Palatino Linotype","Book Antiqua",Georgia,serif;text-shadow:0 10px 24px rgba(0,0,0,.34)}
+    .subtitle{margin:10px 0 0;color:var(--muted);max-width:640px;line-height:1.55;font-size:1.06rem}
     .playfield{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start}
-    .card,.instructions{background:var(--panel);border:1px solid var(--border);border-radius:22px;box-shadow:var(--shadow);backdrop-filter:blur(12px)}
-    .canvas-card{padding:18px}
-    canvas{display:block;width:100%;max-width:720px;background:linear-gradient(135deg,rgba(255,211,130,.08),rgba(39,87,119,.08)),#132131;border:1px solid rgba(255,255,255,.06);border-radius:16px;cursor:pointer}
+    .card,.instructions{background:linear-gradient(180deg,rgba(17,28,45,.95),rgba(9,15,26,.9));border:1px solid var(--border);border-radius:24px;box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.06);backdrop-filter:blur(16px);position:relative;overflow:hidden}
+    .card::before,.instructions::before{content:"";position:absolute;left:16px;right:16px;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,236,186,.58),transparent)}
+    .canvas-card{padding:18px 18px 16px}
+    canvas{display:block;width:100%;max-width:720px;background:radial-gradient(circle at 20% 18%,rgba(255,227,166,.08),transparent 18%),linear-gradient(135deg,rgba(255,211,130,.08),rgba(39,87,119,.08)),#132131;border:1px solid rgba(255,255,255,.06);border-radius:18px;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035),0 22px 46px rgba(0,0,0,.34)}
     .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;color:var(--muted);font-size:.92rem}
-    .legend span{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.06)}
+    .legend span{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
     .swatch{width:12px;height:12px;border-radius:3px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
     .hud{display:grid;gap:14px}
     .card{padding:16px}
-    .card h2,.instructions h2{margin:0 0 10px;font-size:1rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+    .card h2,.instructions h2{margin:0 0 10px;font-size:1rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);position:relative}
     .setup{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-    .segmented{display:inline-flex;gap:8px;padding:6px;background:rgba(255,255,255,.05);border-radius:999px}
-    .segmented button,button.action,.queue-list button{border:0;border-radius:999px;font-weight:700;cursor:pointer;transition:transform 120ms ease,background 120ms ease,opacity 120ms ease}
-    .segmented button,button.action{background:rgba(255,255,255,.08);color:var(--text);padding:10px 14px}
-    .segmented button.active,button.action.primary{background:linear-gradient(135deg,#ffda89,#d99f35);color:#2d1e03}
-    button.action.secondary{background:rgba(77,167,144,.18);color:#d6f6ec}
-    button.action.ghost{background:rgba(255,255,255,.06);color:var(--muted)}
+    .segmented{display:inline-flex;gap:8px;padding:6px;background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));border-radius:999px;border:1px solid rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+    .segmented button,button.action,.queue-list button{border:0;border-radius:999px;font-weight:700;cursor:pointer;transition:transform 120ms ease,background 120ms ease,opacity 120ms ease,box-shadow 120ms ease}
+    .segmented button,button.action{background:linear-gradient(180deg,rgba(255,255,255,.11),rgba(255,255,255,.05));color:var(--text);padding:10px 14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+    .segmented button.active,button.action.primary{background:linear-gradient(135deg,#ffda89,#d99f35);color:#2d1e03;box-shadow:0 10px 20px rgba(199,142,45,.22),inset 0 1px 0 rgba(255,255,255,.38)}
+    button.action.secondary{background:linear-gradient(180deg,rgba(77,167,144,.28),rgba(42,109,93,.2));color:#d6f6ec}
+    button.action.ghost{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));color:var(--muted)}
     .segmented button:hover,button.action:hover{transform:translateY(-1px)}
     button:disabled{opacity:.42;cursor:not-allowed;transform:none}
     .stat-grid,.selection-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-    .panel-slot{padding:10px 12px;border-radius:14px;background:var(--panel-soft);border:1px solid rgba(255,255,255,.06)}
+    .panel-slot{padding:10px 12px;border-radius:15px;background:linear-gradient(180deg,rgba(28,43,67,.84),rgba(17,28,45,.78));border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
     .label{display:block;font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-    .value{font-size:1rem;font-weight:700;line-height:1.35}
+    .value{font-size:1.02rem;font-weight:700;line-height:1.35}
     .player-pill{display:inline-flex;align-items:center;gap:8px}
     .dot{width:12px;height:12px;border-radius:50%;flex:0 0 12px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.26)}
-    .slider-wrap{margin-top:12px;padding:12px;border-radius:16px;background:var(--panel-soft);border:1px solid rgba(255,255,255,.06)}
+    .slider-wrap{margin-top:12px;padding:12px;border-radius:16px;background:linear-gradient(180deg,rgba(28,43,67,.84),rgba(17,28,45,.78));border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
     input[type="range"]{width:100%;accent-color:#ffce61}
     .button-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
     .player-list,.queue-list,.log-list{list-style:none;padding:0;margin:0;display:grid;gap:8px}
-    .player-list li,.queue-list li,.log-list li{padding:10px 12px;border-radius:14px;background:var(--panel-soft);border:1px solid rgba(255,255,255,.06)}
+    .player-list li,.queue-list li,.log-list li{padding:10px 12px;border-radius:14px;background:linear-gradient(180deg,rgba(28,43,67,.82),rgba(18,30,46,.74));border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
     .player-list li{display:flex;justify-content:space-between;align-items:center;gap:12px}
-    .queue-list button{float:right;background:rgba(239,123,107,.18);color:#ffd6d0;padding:6px 10px}
-    .log-list{max-height:256px;overflow:auto}
+    .queue-list button{float:right;background:linear-gradient(180deg,rgba(239,123,107,.26),rgba(136,54,44,.24));color:#ffd6d0;padding:6px 10px}
+    .log-list{max-height:256px;overflow:auto;scrollbar-width:thin;scrollbar-color:rgba(255,210,108,.4) rgba(255,255,255,.05)}
+    .log-list::-webkit-scrollbar{width:10px}
+    .log-list::-webkit-scrollbar-thumb{background:rgba(255,210,108,.35);border-radius:999px}
+    .log-list::-webkit-scrollbar-track{background:rgba(255,255,255,.04);border-radius:999px}
     .muted{color:var(--muted)}
-    .instructions{margin-top:18px;padding:18px 20px;line-height:1.6}
+    .instructions{margin-top:18px;padding:18px 20px;line-height:1.65}
     .instructions ol{margin:8px 0 0 18px;padding:0}
     @media (max-width:1050px){.playfield{grid-template-columns:1fr}}
   </style>
@@ -139,6 +144,7 @@
       oceanDeep: "#091018",
       oceanMid: "#10233a",
       oceanShallow: "#163656",
+      terrainPalette: { plains: "#cbac70", forest: "#4b8054", mountains: "#a9b2c1" },
       terrainTint: { plains: "rgba(245,215,145,.13)", forest: "rgba(34,91,55,.34)", mountains: "rgba(171,177,188,.4)" },
       fogFill: "rgba(8,12,20,.24)",
       borderJitter: 16,
@@ -148,6 +154,23 @@
     const cap = (text) => text[0].toUpperCase() + text.slice(1);
     const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
     const rand = (min, max) => min + Math.random() * (max - min);
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const hexToRgb = (hex) => {
+      let value = hex.replace("#", "");
+      if (value.length === 3) value = value.split("").map((part) => part + part).join("");
+      const number = Number.parseInt(value, 16);
+      return { r: (number >> 16) & 255, g: (number >> 8) & 255, b: number & 255 };
+    };
+    const mixHex = (a, b, t) => {
+      const first = hexToRgb(a);
+      const second = hexToRgb(b);
+      const toHex = (value) => Math.round(value).toString(16).padStart(2, "0");
+      return `#${toHex(lerp(first.r, second.r, t))}${toHex(lerp(first.g, second.g, t))}${toHex(lerp(first.b, second.b, t))}`;
+    };
+    const withAlpha = (hex, alpha) => {
+      const { r, g, b } = hexToRgb(hex);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
     const pointInPolygon = (point, polygon) => {
       let inside = false;
       for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
@@ -650,12 +673,20 @@
       constructor(canvas) {
         this.canvas = canvas;
         this.ctx = canvas.getContext("2d");
+        this.viewWidth = CONFIG.mapWidth;
+        this.viewHeight = CONFIG.mapHeight;
+        this.pixelRatio = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        this.canvas.width = this.viewWidth * this.pixelRatio;
+        this.canvas.height = this.viewHeight * this.pixelRatio;
+        this.ctx.lineJoin = "round";
+        this.ctx.lineCap = "round";
+        this.textures = this.buildTextures();
       }
 
       territoryFromEvent(event, state) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = ((event.clientX - rect.left) / rect.width) * this.canvas.width;
-        const y = ((event.clientY - rect.top) / rect.height) * this.canvas.height;
+        const x = ((event.clientX - rect.left) / rect.width) * this.viewWidth;
+        const y = ((event.clientY - rect.top) / rect.height) * this.viewHeight;
         if (!state.worldProfile || !MapGenerator.pointInWorld(state.worldProfile, x, y)) return null;
         const hit = state.territories.find((territory) => pointInPolygon({ x, y }, territory.polygon));
         return hit ? hit.id : null;
@@ -663,7 +694,9 @@
 
       render(state) {
         const { ctx } = this;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
         this.drawOcean(ctx);
         if (!state.worldProfile) return;
         const selected = state.selectedTerritoryId === null ? null : state.getTerritory(state.selectedTerritoryId);
@@ -672,14 +705,11 @@
         ctx.save();
         this.traceWorldPath(ctx, state.worldProfile);
         ctx.clip();
-        state.territories.forEach((territory) => this.drawCountry(ctx, territory, CONFIG.hiddenCountryColor, CONFIG.hiddenBorder));
+        state.territories.forEach((territory) => this.drawCountry(ctx, territory, CONFIG.hiddenCountryColor, CONFIG.hiddenBorder, false));
         state.territories.forEach((territory) => {
           if (!state.visibleIds.has(territory.id)) return;
           const fill = territory.ownerId === -1 ? CONFIG.neutralColor : state.players[territory.ownerId].color;
-          this.drawCountry(ctx, territory, fill, "rgba(255,255,255,.16)");
-          ctx.fillStyle = CONFIG.terrainTint[territory.terrain];
-          this.tracePolygon(ctx, territory.polygon);
-          ctx.fill();
+          this.drawCountry(ctx, territory, fill, "rgba(255,255,255,.18)", true);
           if (selected && territory.id === selected.id) this.strokeCountry(ctx, territory, "#ffdf8b", 4);
           else if (targetSet.has(territory.id)) this.strokeCountry(ctx, territory, "rgba(107,234,214,.9)", 3);
         });
@@ -691,22 +721,66 @@
       }
 
       drawOcean(ctx) {
-        const gradient = ctx.createLinearGradient(0, 0, this.canvas.width, this.canvas.height);
+        const gradient = ctx.createLinearGradient(0, 0, this.viewWidth, this.viewHeight);
         gradient.addColorStop(0, CONFIG.oceanDeep);
         gradient.addColorStop(0.5, CONFIG.oceanMid);
         gradient.addColorStop(1, CONFIG.oceanShallow);
         ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        ctx.strokeStyle = "rgba(255,255,255,.03)";
-        for (let y = 48; y < this.canvas.height; y += 36) {
+        ctx.fillRect(0, 0, this.viewWidth, this.viewHeight);
+        const glow = ctx.createRadialGradient(148, 118, 0, 148, 118, 290);
+        glow.addColorStop(0, "rgba(255,211,144,.13)");
+        glow.addColorStop(1, "rgba(255,211,144,0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, this.viewWidth, this.viewHeight);
+        const glowTwo = ctx.createRadialGradient(600, 540, 0, 600, 540, 260);
+        glowTwo.addColorStop(0, "rgba(94,168,220,.12)");
+        glowTwo.addColorStop(1, "rgba(94,168,220,0)");
+        ctx.fillStyle = glowTwo;
+        ctx.fillRect(0, 0, this.viewWidth, this.viewHeight);
+        ctx.save();
+        ctx.globalAlpha = 0.2;
+        ctx.fillStyle = this.textures.ocean;
+        ctx.fillRect(0, 0, this.viewWidth, this.viewHeight);
+        ctx.restore();
+        ctx.strokeStyle = "rgba(196,224,255,.06)";
+        ctx.lineWidth = 1.1;
+        for (let y = 56; y < this.viewHeight + 40; y += 48) {
           ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(this.canvas.width, y);
+          ctx.moveTo(-50, y);
+          for (let x = -50; x <= this.viewWidth + 50; x += 42) {
+            ctx.lineTo(x, y + Math.sin((x + y) * 0.017) * 5);
+          }
           ctx.stroke();
         }
+        const vignette = ctx.createRadialGradient(this.viewWidth / 2, this.viewHeight / 2, 180, this.viewWidth / 2, this.viewHeight / 2, 540);
+        vignette.addColorStop(0, "rgba(0,0,0,0)");
+        vignette.addColorStop(1, "rgba(0,0,0,.48)");
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, this.viewWidth, this.viewHeight);
       }
 
       drawWorldBackplate(ctx, profile) {
+        ctx.save();
+        ctx.shadowColor = "rgba(0,0,0,.42)";
+        ctx.shadowBlur = 28;
+        ctx.shadowOffsetY = 16;
+        this.traceWorldPath(ctx, profile);
+        ctx.fillStyle = "rgba(7,12,21,.9)";
+        ctx.fill();
+        ctx.restore();
+        ctx.save();
+        this.traceWorldPath(ctx, profile);
+        ctx.clip();
+        const gradient = ctx.createLinearGradient(110, 70, 610, 650);
+        gradient.addColorStop(0, "rgba(255,241,204,.08)");
+        gradient.addColorStop(0.45, "rgba(255,255,255,.02)");
+        gradient.addColorStop(1, "rgba(0,0,0,.15)");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, this.viewWidth, this.viewHeight);
+        ctx.globalAlpha = 0.08;
+        ctx.fillStyle = this.textures.plains;
+        ctx.fillRect(0, 0, this.viewWidth, this.viewHeight);
+        ctx.restore();
         this.traceWorldPath(ctx, profile);
         ctx.fillStyle = CONFIG.fogFill;
         ctx.fill();
@@ -714,45 +788,109 @@
 
       drawWorldOutline(ctx, profile) {
         this.traceWorldPath(ctx, profile);
+        ctx.strokeStyle = "rgba(4,9,16,.58)";
+        ctx.lineWidth = 10;
+        ctx.stroke();
+        this.traceWorldPath(ctx, profile);
+        ctx.strokeStyle = "rgba(255,241,201,.08)";
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        this.traceWorldPath(ctx, profile);
         ctx.strokeStyle = CONFIG.coastLine;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.6;
         ctx.stroke();
         ctx.lineWidth = 1;
       }
 
-      drawCountry(ctx, territory, fill, stroke) {
+      drawCountry(ctx, territory, fill, stroke, visible) {
+        const bounds = this.polygonBounds(territory.polygon);
+        const terrainTone = CONFIG.terrainPalette[territory.terrain];
+        ctx.save();
         this.tracePolygon(ctx, territory.polygon);
-        ctx.fillStyle = fill;
-        ctx.fill();
+        ctx.clip();
+        const gradient = ctx.createLinearGradient(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
+        gradient.addColorStop(0, mixHex(fill, terrainTone, visible ? 0.2 : 0.08));
+        gradient.addColorStop(0.55, mixHex(fill, "#f4ead0", visible ? 0.08 : 0.02));
+        gradient.addColorStop(1, mixHex(fill, "#091018", visible ? 0.28 : 0.4));
+        ctx.fillStyle = gradient;
+        ctx.fillRect(bounds.minX - 8, bounds.minY - 8, bounds.maxX - bounds.minX + 16, bounds.maxY - bounds.minY + 16);
+        ctx.globalAlpha = visible ? 0.22 : 0.08;
+        ctx.fillStyle = this.textures[territory.terrain];
+        ctx.fillRect(bounds.minX - 8, bounds.minY - 8, bounds.maxX - bounds.minX + 16, bounds.maxY - bounds.minY + 16);
+        const sheen = ctx.createLinearGradient(bounds.minX, bounds.minY, bounds.minX, bounds.maxY);
+        sheen.addColorStop(0, visible ? "rgba(255,248,226,.16)" : "rgba(255,255,255,.06)");
+        sheen.addColorStop(0.4, "rgba(255,255,255,0)");
+        sheen.addColorStop(1, "rgba(0,0,0,.18)");
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = sheen;
+        ctx.fillRect(bounds.minX - 8, bounds.minY - 8, bounds.maxX - bounds.minX + 16, bounds.maxY - bounds.minY + 16);
+        if (visible && territory.ownerId !== -1) {
+          const glow = ctx.createRadialGradient(territory.x - 10, territory.y - 12, 4, territory.x, territory.y, 78);
+          glow.addColorStop(0, withAlpha(fill, 0.18));
+          glow.addColorStop(1, withAlpha(fill, 0));
+          ctx.fillStyle = glow;
+          ctx.fillRect(bounds.minX - 24, bounds.minY - 24, bounds.maxX - bounds.minX + 48, bounds.maxY - bounds.minY + 48);
+        }
+        ctx.restore();
+        this.tracePolygon(ctx, territory.polygon);
+        ctx.strokeStyle = "rgba(5,10,18,.45)";
+        ctx.lineWidth = 2.6;
+        ctx.stroke();
+        this.tracePolygon(ctx, territory.polygon);
         ctx.strokeStyle = stroke;
         ctx.lineWidth = 1;
         ctx.stroke();
       }
 
       strokeCountry(ctx, territory, stroke, width) {
+        ctx.save();
+        ctx.shadowColor = stroke;
+        ctx.shadowBlur = width * 5;
         this.tracePolygon(ctx, territory.polygon);
         ctx.strokeStyle = stroke;
         ctx.lineWidth = width;
         ctx.stroke();
+        ctx.restore();
         ctx.lineWidth = 1;
       }
 
       drawLabels(ctx, state) {
         state.territories.forEach((territory) => {
           if (!state.visibleIds.has(territory.id)) return;
-          ctx.fillStyle = "rgba(8,12,20,.6)";
+          const ownerColor = territory.ownerId === -1 ? "#b8bcc6" : state.players[territory.ownerId].color;
+          const badge = ctx.createLinearGradient(territory.x - 18, territory.y - 18, territory.x + 18, territory.y + 18);
+          badge.addColorStop(0, "rgba(13,20,31,.96)");
+          badge.addColorStop(1, "rgba(32,48,68,.88)");
+          ctx.save();
+          ctx.shadowColor = "rgba(0,0,0,.34)";
+          ctx.shadowBlur = 14;
           ctx.beginPath();
-          ctx.arc(territory.x, territory.y, 16, 0, Math.PI * 2);
+          ctx.arc(territory.x, territory.y, 17, 0, Math.PI * 2);
+          ctx.fillStyle = badge;
           ctx.fill();
+          ctx.restore();
+          ctx.strokeStyle = withAlpha(ownerColor, 0.52);
+          ctx.lineWidth = 2;
+          ctx.stroke();
           ctx.fillStyle = "#f8f5eb";
           ctx.font = "bold 15px Trebuchet MS";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(String(territory.armies), territory.x, territory.y);
-          ctx.font = "11px Trebuchet MS";
-          ctx.fillStyle = "rgba(255,255,255,.75)";
+          ctx.font = "bold 10px Trebuchet MS";
+          ctx.fillStyle = "rgba(255,255,255,.82)";
           const glyph = territory.terrain === "forest" ? "F" : territory.terrain === "mountains" ? "M" : "";
-          if (glyph) ctx.fillText(glyph, territory.x + 16, territory.y - 14);
+          if (glyph) {
+            ctx.beginPath();
+            ctx.arc(territory.x + 18, territory.y - 15, 8, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(9,15,26,.74)";
+            ctx.fill();
+            ctx.strokeStyle = "rgba(255,255,255,.1)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.fillStyle = territory.terrain === "forest" ? "#bfe4b7" : "#e2e7ef";
+            ctx.fillText(glyph, territory.x + 18, territory.y - 14);
+          }
         });
       }
 
@@ -761,24 +899,132 @@
           const from = state.getTerritory(order.fromId);
           const to = state.getTerritory(order.toId);
           if (!state.visibleIds.has(from.id) && !state.visibleIds.has(to.id)) return;
-          ctx.strokeStyle = order.type === "attack" ? "rgba(255,123,107,.9)" : "rgba(116,225,192,.9)";
+          const stroke = order.type === "attack" ? "rgba(255,123,107,.92)" : "rgba(116,225,192,.92)";
+          const dx = to.x - from.x;
+          const dy = to.y - from.y;
+          const length = Math.hypot(dx, dy) || 1;
+          const nx = -dy / length;
+          const ny = dx / length;
+          const bend = Math.min(28, length * 0.18) * (order.type === "attack" ? 1 : -1);
+          const controlX = (from.x + to.x) / 2 + nx * bend;
+          const controlY = (from.y + to.y) / 2 + ny * bend;
+          ctx.save();
+          ctx.strokeStyle = stroke;
+          ctx.shadowColor = stroke;
+          ctx.shadowBlur = 12;
           ctx.lineWidth = 3;
           ctx.beginPath();
           ctx.moveTo(from.x, from.y);
-          ctx.lineTo(to.x, to.y);
+          ctx.quadraticCurveTo(controlX, controlY, to.x, to.y);
           ctx.stroke();
+          const angle = Math.atan2(to.y - controlY, to.x - controlX);
+          ctx.fillStyle = stroke;
+          ctx.beginPath();
+          ctx.moveTo(to.x, to.y);
+          ctx.lineTo(to.x - Math.cos(angle - Math.PI / 6) * 12, to.y - Math.sin(angle - Math.PI / 6) * 12);
+          ctx.lineTo(to.x - Math.cos(angle + Math.PI / 6) * 12, to.y - Math.sin(angle + Math.PI / 6) * 12);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
           ctx.lineWidth = 1;
         });
       }
 
       drawBanner(ctx, text) {
-        ctx.fillStyle = "rgba(3,8,14,.74)";
-        ctx.fillRect(0, this.canvas.height / 2 - 58, this.canvas.width, 116);
+        const top = this.viewHeight / 2 - 60;
+        const gradient = ctx.createLinearGradient(0, top, 0, top + 120);
+        gradient.addColorStop(0, "rgba(7,12,21,.9)");
+        gradient.addColorStop(0.5, "rgba(17,28,45,.92)");
+        gradient.addColorStop(1, "rgba(7,12,21,.9)");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, top, this.viewWidth, 120);
+        ctx.strokeStyle = "rgba(255,223,156,.24)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, top, this.viewWidth, 120);
         ctx.fillStyle = "#ffde92";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.font = 'bold 34px "Palatino Linotype", Georgia, serif';
-        ctx.fillText(text, this.canvas.width / 2, this.canvas.height / 2);
+        ctx.shadowColor = "rgba(0,0,0,.3)";
+        ctx.shadowBlur = 12;
+        ctx.fillText(text, this.viewWidth / 2, this.viewHeight / 2);
+        ctx.shadowBlur = 0;
+      }
+
+      buildTextures() {
+        return {
+          ocean: this.createPattern(120, (ctx, size) => {
+            ctx.strokeStyle = "rgba(173,222,255,.12)";
+            ctx.lineWidth = 1;
+            for (let y = 18; y < size + 20; y += 24) {
+              ctx.beginPath();
+              ctx.moveTo(-10, y);
+              for (let x = -10; x <= size + 10; x += 18) ctx.lineTo(x, y + Math.sin((x + y) * 0.08) * 3);
+              ctx.stroke();
+            }
+          }),
+          plains: this.createPattern(88, (ctx, size) => {
+            ctx.fillStyle = "rgba(255,243,205,.08)";
+            for (let i = 0; i < 44; i += 1) ctx.fillRect(rand(0, size), rand(0, size), 1.6, 1.6);
+            ctx.strokeStyle = "rgba(255,239,191,.07)";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-8, size * 0.34);
+            ctx.bezierCurveTo(size * 0.2, size * 0.08, size * 0.6, size * 0.52, size + 8, size * 0.22);
+            ctx.stroke();
+          }),
+          forest: this.createPattern(96, (ctx, size) => {
+            ctx.strokeStyle = "rgba(223,250,221,.16)";
+            ctx.lineWidth = 1.2;
+            for (let x = 12; x < size; x += 20) {
+              for (let y = 14; y < size; y += 22) {
+                ctx.beginPath();
+                ctx.moveTo(x, y + 6);
+                ctx.lineTo(x - 4, y);
+                ctx.lineTo(x, y - 7);
+                ctx.lineTo(x + 4, y);
+                ctx.closePath();
+                ctx.stroke();
+              }
+            }
+          }),
+          mountains: this.createPattern(92, (ctx, size) => {
+            ctx.strokeStyle = "rgba(239,244,250,.16)";
+            ctx.lineWidth = 1.1;
+            for (let x = 12; x < size; x += 24) {
+              ctx.beginPath();
+              ctx.moveTo(x - 6, size);
+              ctx.lineTo(x + 2, size * 0.45);
+              ctx.lineTo(x + 12, size);
+              ctx.stroke();
+            }
+            ctx.strokeStyle = "rgba(255,255,255,.08)";
+            for (let y = 8; y < size; y += 18) {
+              ctx.beginPath();
+              ctx.moveTo(-6, y);
+              ctx.lineTo(size + 6, y - 14);
+              ctx.stroke();
+            }
+          })
+        };
+      }
+
+      createPattern(size, painter) {
+        const surface = document.createElement("canvas");
+        surface.width = size;
+        surface.height = size;
+        const patternContext = surface.getContext("2d");
+        painter(patternContext, size);
+        return this.ctx.createPattern(surface, "repeat");
+      }
+
+      polygonBounds(polygon) {
+        return polygon.reduce((bounds, point) => ({
+          minX: Math.min(bounds.minX, point.x),
+          minY: Math.min(bounds.minY, point.y),
+          maxX: Math.max(bounds.maxX, point.x),
+          maxY: Math.max(bounds.maxY, point.y)
+        }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
       }
 
       tracePolygon(ctx, polygon) {
