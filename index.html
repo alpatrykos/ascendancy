@@ -57,7 +57,7 @@
     <div class="masthead">
       <div>
         <h1>Ascendancy</h1>
-        <p class="subtitle">Forge an empire across a procedural frontier. Expand into neutral land, break fortified borders, and outmaneuver rival houses before they consume the map.</p>
+        <p class="subtitle">Forge an empire across a node-based world map. Expand through connected country silhouettes, break narrow border chains, and outmaneuver rival houses before they consume the map.</p>
       </div>
       <div class="card">
         <h2>New Campaign</h2>
@@ -76,10 +76,10 @@
       <div class="card canvas-card">
         <canvas id="board" width="720" height="720" aria-label="Ascendancy map"></canvas>
         <div class="legend">
-          <span><i class="swatch" style="background:#406b34"></i>Forest slows armies by 1 on entry</span>
+          <span><i class="swatch" style="background:#406b34"></i>Forest countries slow armies by 1 on entry</span>
           <span><i class="swatch" style="background:#8a9099"></i>Mountains defend at 1.4x</span>
-          <span><i class="swatch" style="background:#244e84"></i>Water is impassable</span>
-          <span><i class="swatch" style="background:#121a27"></i>Fog hides unseen cells</span>
+          <span><i class="swatch" style="background:#244e84"></i>Oceans split the graph into coastlines and chokepoints</span>
+          <span><i class="swatch" style="background:#121a27"></i>Fog hides control, but country silhouettes remain readable</span>
         </div>
       </div>
 
@@ -118,48 +118,75 @@
       <h2>How To Play</h2>
       <ol>
         <li>During Reinforcement, click your own visible territories to place all available armies.</li>
-        <li>In Order phase, click one of your territories, choose how many armies to send, then click an adjacent territory to queue a move or attack.</li>
+        <li>In Order phase, click one of your countries, choose how many armies to send, then click a bordering country to queue a move or attack.</li>
         <li>Each territory may issue one outgoing order per turn. Click Resolve Turn to process every queued action in order.</li>
-        <li>Forest entry removes 1 committed army, mountains boost defenders, and water blocks all movement.</li>
-        <li>You only see your own lands and adjacent cells. Conquer every non-water territory to achieve Ascendancy.</li>
+        <li>Forest entry removes 1 committed army, mountains boost defenders, and oceans create impassable gaps between borders.</li>
+        <li>You only see details around your holdings, but distant country silhouettes stay visible so you can read the world. Conquer every country to achieve Ascendancy.</li>
       </ol>
     </section>
   </div>
 
   <script>
     const CONFIG = {
-      width: 20, height: 20, cellSize: 36, maxAiOrders: 6, minPassable: 260, minSeedDistance: 6,
+      mapWidth: 720, mapHeight: 720, nodeCount: 36, minNodeDistance: 58, startClusterSize: 5,
+      minSeedDistance: 170, maxAiOrders: 6,
       terrainDefense: { plains: 1, forest: 1.15, mountains: 1.4 },
       colors: ["#f0bd55", "#c95a48", "#4aa89f", "#8470d5"],
       neutralColor: "#66666f",
-      terrainTint: { plains: "rgba(245,215,145,.15)", forest: "rgba(34,91,55,.35)", mountains: "rgba(171,177,188,.38)", water: "rgba(28,68,118,.95)" },
-      fogColor: "rgba(10,14,24,.88)",
+      hiddenCountryColor: "#233347",
+      hiddenBorder: "rgba(255,255,255,.08)",
+      coastLine: "rgba(255,231,181,.2)",
+      oceanDeep: "#091018",
+      oceanMid: "#10233a",
+      oceanShallow: "#163656",
+      terrainTint: { plains: "rgba(245,215,145,.13)", forest: "rgba(34,91,55,.34)", mountains: "rgba(171,177,188,.4)" },
+      fogFill: "rgba(8,12,20,.24)",
       names: ["Aureline Dominion", "Crimson Reach", "Verdant League", "Duskwind Pact"]
     };
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
     const cap = (text) => text[0].toUpperCase() + text.slice(1);
+    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const rand = (min, max) => min + Math.random() * (max - min);
 
     class Territory {
-      constructor(id, x, y, terrain) {
-        this.id = id; this.x = x; this.y = y; this.terrain = terrain;
-        this.ownerId = terrain === "water" ? null : -1;
-        this.armies = terrain === "water" ? 0 : 1;
+      constructor(id, x, y, name, terrain, polygon) {
+        this.id = id;
+        this.x = x;
+        this.y = y;
+        this.name = name;
+        this.terrain = terrain;
+        this.polygon = polygon;
+        this.ownerId = -1;
+        this.armies = 1;
         this.neighbors = [];
       }
     }
 
     class Player {
       constructor(id, name, color, isHuman) {
-        this.id = id; this.name = name; this.color = color; this.isHuman = isHuman; this.eliminated = false;
+        this.id = id;
+        this.name = name;
+        this.color = color;
+        this.isHuman = isHuman;
+        this.eliminated = false;
       }
     }
 
     class GameState {
       constructor(playerCount) {
         this.players = Array.from({ length: playerCount }, (_, id) => new Player(id, CONFIG.names[id], CONFIG.colors[id], id === 0));
-        this.grid = []; this.territories = []; this.currentPlayerIndex = 0; this.phase = "reinforcement";
-        this.reinforcementsLeft = 0; this.selectedTerritoryId = null; this.sendArmies = 1; this.queuedOrders = [];
-        this.visibleIds = new Set(); this.winnerId = null; this.combatLog = []; this.round = 1;
+        this.territories = [];
+        this.worldProfile = null;
+        this.currentPlayerIndex = 0;
+        this.phase = "reinforcement";
+        this.reinforcementsLeft = 0;
+        this.selectedTerritoryId = null;
+        this.sendArmies = 1;
+        this.queuedOrders = [];
+        this.visibleIds = new Set();
+        this.winnerId = null;
+        this.combatLog = [];
+        this.round = 1;
       }
       currentPlayer() { return this.players[this.currentPlayerIndex]; }
       getTerritory(id) { return this.territories[id]; }
@@ -169,95 +196,298 @@
     }
 
     const MapGenerator = {
-      generate(width = CONFIG.width, height = CONFIG.height, playerCount = 3) {
-        for (let attempt = 0; attempt < 500; attempt += 1) {
-          const grid = [], territories = [];
-          for (let y = 0; y < height; y += 1) {
-            const row = [];
-            for (let x = 0; x < width; x += 1) {
-              const id = y * width + x;
-              territories.push(new Territory(id, x, y, this.randomTerrain()));
-              row.push(id);
-            }
-            grid.push(row);
-          }
-          this.buildNeighbors(territories, width, height);
-          const passable = territories.filter((territory) => territory.ownerId !== null);
-          if (passable.length < CONFIG.minPassable || !this.isConnected(passable, territories)) continue;
-          const seeds = this.chooseSeeds(passable, territories, playerCount);
+      generate(playerCount = 3) {
+        for (let attempt = 0; attempt < 240; attempt += 1) {
+          const profile = this.createProfile();
+          const points = this.sampleNodes(profile);
+          if (!points) continue;
+          const polygons = this.buildVoronoi(points);
+          if (!polygons) continue;
+          const territories = points.map((point, id) => new Territory(
+            id,
+            point.x,
+            point.y,
+            point.name,
+            this.assignTerrain(point, profile),
+            polygons[id]
+          ));
+          this.buildNeighbors(territories, profile);
+          if (!this.isConnected(territories)) continue;
+          const seeds = this.chooseSeeds(territories, playerCount);
           const clusters = seeds ? this.growClusters(seeds, territories) : null;
           if (!clusters) continue;
-          passable.forEach((territory) => { territory.ownerId = -1; territory.armies = 1; });
           clusters.forEach((cluster, playerId) => {
-            cluster.forEach((id) => { territories[id].ownerId = playerId; territories[id].armies = 2; });
+            cluster.forEach((id) => {
+              territories[id].ownerId = playerId;
+              territories[id].armies = 2;
+            });
             territories[seeds[playerId]].armies = 4;
           });
-          return { grid, territories };
+          return { territories, worldProfile: profile };
         }
         throw new Error("Unable to generate a valid map.");
       },
 
-      randomTerrain() {
-        const roll = Math.random();
-        if (roll < 0.52) return "plains";
-        if (roll < 0.75) return "forest";
-        if (roll < 0.9) return "mountains";
-        return "water";
+      createProfile() {
+        const drift = (amount) => rand(-amount, amount);
+        return {
+          seed: Array.from({ length: 6 }, () => Math.random() * Math.PI * 2),
+          continents: [
+            { cx: 150 + drift(16), cy: 205 + drift(18), rx: 108 + drift(10), ry: 118 + drift(12) },
+            { cx: 198 + drift(18), cy: 525 + drift(20), rx: 82 + drift(8), ry: 146 + drift(12) },
+            { cx: 336 + drift(14), cy: 198 + drift(12), rx: 72 + drift(6), ry: 55 + drift(5) },
+            { cx: 396 + drift(16), cy: 394 + drift(18), rx: 95 + drift(8), ry: 148 + drift(14) },
+            { cx: 568 + drift(18), cy: 214 + drift(15), rx: 146 + drift(14), ry: 110 + drift(10) },
+            { cx: 613 + drift(16), cy: 560 + drift(12), rx: 94 + drift(8), ry: 66 + drift(6) }
+          ],
+          bridges: [
+            { x1: 205 + drift(6), y1: 308 + drift(8), x2: 222 + drift(6), y2: 372 + drift(10), r: 22 },
+            { x1: 245 + drift(10), y1: 170 + drift(8), x2: 300 + drift(8), y2: 152 + drift(6), r: 18 },
+            { x1: 356 + drift(8), y1: 250 + drift(8), x2: 381 + drift(8), y2: 293 + drift(8), r: 28 },
+            { x1: 432 + drift(8), y1: 232 + drift(8), x2: 485 + drift(8), y2: 235 + drift(8), r: 30 },
+            { x1: 545 + drift(6), y1: 430 + drift(10), x2: 589 + drift(6), y2: 495 + drift(10), r: 18 }
+          ],
+          ridges: [
+            { x1: 112, y1: 168, x2: 182, y2: 250, r: 36, strength: 0.72 },
+            { x1: 177, y1: 450, x2: 220, y2: 635, r: 34, strength: 0.86 },
+            { x1: 334, y1: 248, x2: 426, y2: 512, r: 38, strength: 0.92 },
+            { x1: 472, y1: 182, x2: 645, y2: 264, r: 40, strength: 0.8 },
+            { x1: 575, y1: 502, x2: 656, y2: 594, r: 26, strength: 0.66 }
+          ]
+        };
       },
 
-      buildNeighbors(territories, width, height) {
-        const offsets = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      pointInWorld(profile, x, y) {
+        return profile.continents.some((continent) => this.insideEllipse(x, y, continent)) ||
+          profile.bridges.some((bridge) => this.pointToSegmentDistance(x, y, bridge) <= bridge.r);
+      },
+
+      insideEllipse(x, y, ellipse) {
+        const dx = (x - ellipse.cx) / ellipse.rx;
+        const dy = (y - ellipse.cy) / ellipse.ry;
+        return dx * dx + dy * dy <= 1;
+      },
+
+      pointToSegmentDistance(x, y, segment) {
+        const dx = segment.x2 - segment.x1;
+        const dy = segment.y2 - segment.y1;
+        const lengthSq = dx * dx + dy * dy || 1;
+        const t = clamp(((x - segment.x1) * dx + (y - segment.y1) * dy) / lengthSq, 0, 1);
+        const px = segment.x1 + dx * t;
+        const py = segment.y1 + dy * t;
+        return Math.hypot(x - px, y - py);
+      },
+
+      sampleNodes(profile) {
+        const points = [];
+        const usedNames = new Set();
+        const cols = 7;
+        const rows = 6;
+        for (let row = 0; row < rows; row += 1) {
+          for (let col = 0; col < cols; col += 1) {
+            const x = (col + 0.5) * (CONFIG.mapWidth / cols) + rand(-26, 26);
+            const y = (row + 0.5) * (CONFIG.mapHeight / rows) + rand(-34, 34);
+            if (!this.pointInWorld(profile, x, y) || !this.farEnough(points, x, y)) continue;
+            points.push({ x, y, name: this.generateName(points.length, profile.seed, usedNames) });
+          }
+        }
+        let tries = 0;
+        while (points.length < CONFIG.nodeCount && tries < 9000) {
+          const x = rand(48, CONFIG.mapWidth - 48);
+          const y = rand(44, CONFIG.mapHeight - 44);
+          tries += 1;
+          if (!this.pointInWorld(profile, x, y) || !this.farEnough(points, x, y)) continue;
+          points.push({ x, y, name: this.generateName(points.length, profile.seed, usedNames) });
+        }
+        return points.length >= CONFIG.nodeCount ? points.slice(0, CONFIG.nodeCount) : null;
+      },
+
+      farEnough(points, x, y) {
+        return points.every((point) => Math.hypot(point.x - x, point.y - y) >= CONFIG.minNodeDistance);
+      },
+
+      generateName(index, seed, used) {
+        const starts = ["Ar", "Bel", "Cae", "Dun", "Eld", "Fen", "Gal", "Hal", "Iver", "Kor", "Lun", "Mor", "Nor", "Or", "Prae", "Quel", "Ryn", "Syl", "Tor", "Val"];
+        const middles = ["a", "e", "i", "o", "u", "an", "ar", "el", "en", "or", "is", "um"];
+        const ends = ["dor", "gard", "heim", "mere", "mark", "reach", "vale", "wick", "pass", "crest", "hold", "strand", "fall", "spire", "haven"];
+        for (let attempt = 0; attempt < 24; attempt += 1) {
+          const base = Math.abs(Math.floor(Math.sin(seed[attempt % seed.length] + index * 3.17 + attempt * 1.37) * 100000));
+          const name = starts[base % starts.length] +
+            middles[Math.floor(base / starts.length) % middles.length] +
+            ends[Math.floor(base / (starts.length * middles.length)) % ends.length];
+          if (!used.has(name)) {
+            used.add(name);
+            return name;
+          }
+        }
+        return `March ${index + 1}`;
+      },
+
+      assignTerrain(point, profile) {
+        const latitude = Math.abs((point.y / CONFIG.mapHeight) * 2 - 1);
+        const ridge = profile.ridges.reduce((max, ridgeLine) => Math.max(max, this.segmentInfluence(point.x, point.y, ridgeLine)), 0);
+        const moisture = 0.52 + this.waveNoise(point.x * 0.013, point.y * 0.013, profile.seed) * 0.32;
+        if (ridge > 0.6) return "mountains";
+        if (moisture > 0.56 && latitude < 0.74) return "forest";
+        return "plains";
+      },
+
+      segmentInfluence(x, y, segment) {
+        return Math.max(0, 1 - this.pointToSegmentDistance(x, y, segment) / segment.r) * segment.strength;
+      },
+
+      waveNoise(x, y, seed) {
+        return (
+          Math.sin(x + seed[0]) * 0.44 +
+          Math.cos(y * 1.1 + seed[1]) * 0.28 +
+          Math.sin((x + y) * 0.72 + seed[2]) * 0.2 +
+          Math.cos((x - y * 0.75) * 0.94 + seed[3]) * 0.15
+        );
+      },
+
+      buildVoronoi(points) {
+        const bounds = [
+          { x: 0, y: 0 },
+          { x: CONFIG.mapWidth, y: 0 },
+          { x: CONFIG.mapWidth, y: CONFIG.mapHeight },
+          { x: 0, y: CONFIG.mapHeight }
+        ];
+        const cells = points.map((point, index) => {
+          let polygon = bounds;
+          for (let otherIndex = 0; otherIndex < points.length; otherIndex += 1) {
+            if (otherIndex === index) continue;
+            polygon = this.clipAgainstBisector(polygon, point, points[otherIndex]);
+            if (polygon.length < 3) return null;
+          }
+          return this.simplifyPolygon(polygon);
+        });
+        return cells.every(Boolean) ? cells : null;
+      },
+
+      clipAgainstBisector(polygon, pointA, pointB) {
+        const midX = (pointA.x + pointB.x) / 2;
+        const midY = (pointA.y + pointB.y) / 2;
+        const vx = pointB.x - pointA.x;
+        const vy = pointB.y - pointA.y;
+        const output = [];
+        for (let i = 0; i < polygon.length; i += 1) {
+          const current = polygon[i];
+          const next = polygon[(i + 1) % polygon.length];
+          const currentSide = (current.x - midX) * vx + (current.y - midY) * vy;
+          const nextSide = (next.x - midX) * vx + (next.y - midY) * vy;
+          const currentInside = currentSide <= 0;
+          const nextInside = nextSide <= 0;
+          if (currentInside && nextInside) {
+            output.push(next);
+          } else if (currentInside && !nextInside) {
+            output.push(this.bisectorIntersection(current, next, currentSide, nextSide));
+          } else if (!currentInside && nextInside) {
+            output.push(this.bisectorIntersection(current, next, currentSide, nextSide));
+            output.push(next);
+          }
+        }
+        return output;
+      },
+
+      bisectorIntersection(a, b, aSide, bSide) {
+        const ratio = aSide / (aSide - bSide || 1);
+        return { x: a.x + (b.x - a.x) * ratio, y: a.y + (b.y - a.y) * ratio };
+      },
+
+      simplifyPolygon(polygon) {
+        const cleaned = [];
+        polygon.forEach((point) => {
+          if (!cleaned.length || dist(point, cleaned[cleaned.length - 1]) > 1) cleaned.push(point);
+        });
+        if (cleaned.length > 2 && dist(cleaned[0], cleaned[cleaned.length - 1]) < 1) cleaned.pop();
+        return cleaned;
+      },
+
+      buildNeighbors(territories, profile) {
+        territories.forEach((territory) => { territory.neighbors = []; });
+        for (let i = 0; i < territories.length; i += 1) {
+          for (let j = i + 1; j < territories.length; j += 1) {
+            if (!this.shareBorder(territories[i].polygon, territories[j].polygon)) continue;
+            territories[i].neighbors.push(j);
+            territories[j].neighbors.push(i);
+          }
+        }
         territories.forEach((territory) => {
-          if (territory.terrain === "water") { territory.neighbors = []; return; }
-          territory.neighbors = offsets
-            .map(([dx, dy]) => [territory.x + dx, territory.y + dy])
-            .filter(([x, y]) => x >= 0 && y >= 0 && x < width && y < height)
-            .map(([x, y]) => territories[y * width + x])
-            .filter((neighbor) => neighbor.terrain !== "water")
-            .map((neighbor) => neighbor.id);
+          const candidates = territories
+            .filter((other) => other.id !== territory.id && !territory.neighbors.includes(other.id))
+            .sort((a, b) => dist(territory, a) - dist(territory, b));
+          for (const candidate of candidates) {
+            if (territory.neighbors.length >= 2) break;
+            if (dist(territory, candidate) > 180 || !this.lineMostlyInWorld(profile, territory, candidate)) continue;
+            territory.neighbors.push(candidate.id);
+            candidate.neighbors.push(territory.id);
+          }
+          territory.neighbors = [...new Set(territory.neighbors)].sort((a, b) => a - b);
         });
       },
 
-      isConnected(passable, territories) {
-        const visited = new Set(), queue = [passable[0].id];
+      shareBorder(polygonA, polygonB) {
+        const matches = [];
+        polygonA.forEach((pointA) => {
+          polygonB.forEach((pointB) => {
+            if (dist(pointA, pointB) < 2.5 && !matches.some((existing) => dist(existing, pointA) < 1)) matches.push(pointA);
+          });
+        });
+        return matches.length >= 2;
+      },
+
+      lineMostlyInWorld(profile, pointA, pointB) {
+        let hits = 0;
+        const samples = 6;
+        for (let i = 1; i < samples; i += 1) {
+          const t = i / samples;
+          const x = pointA.x + (pointB.x - pointA.x) * t;
+          const y = pointA.y + (pointB.y - pointA.y) * t;
+          if (this.pointInWorld(profile, x, y)) hits += 1;
+        }
+        return hits >= samples - 2;
+      },
+
+      isConnected(territories) {
+        const visited = new Set();
+        const queue = [territories[0].id];
         while (queue.length) {
           const id = queue.shift();
           if (visited.has(id)) continue;
           visited.add(id);
           territories[id].neighbors.forEach((neighborId) => { if (!visited.has(neighborId)) queue.push(neighborId); });
         }
-        return visited.size === passable.length;
+        return visited.size === territories.length;
       },
 
-      chooseSeeds(passable, territories, playerCount) {
-        const candidates = this.shuffle(passable.map((territory) => territory.id)), seeds = [];
-        for (const id of candidates) {
-          const candidate = territories[id];
-          const farEnough = seeds.every((seedId) => {
-            const seed = territories[seedId];
-            return Math.abs(seed.x - candidate.x) + Math.abs(seed.y - candidate.y) >= CONFIG.minSeedDistance;
-          });
-          if (farEnough) seeds.push(id);
+      chooseSeeds(territories, playerCount) {
+        const candidates = this.shuffle([...territories]).filter((territory) => territory.neighbors.length >= 2);
+        const seeds = [];
+        for (const candidate of candidates) {
+          const farEnough = seeds.every((seedId) => dist(candidate, territories[seedId]) >= CONFIG.minSeedDistance);
+          if (farEnough) seeds.push(candidate.id);
           if (seeds.length === playerCount) return seeds;
         }
         return null;
       },
 
       growClusters(seeds, territories) {
-        const claimed = new Set(seeds), clusters = [];
+        const claimed = new Set(seeds);
+        const clusters = [];
         for (const seedId of seeds) {
-          const cluster = [seedId], queue = [seedId];
-          while (queue.length && cluster.length < 5) {
+          const cluster = [seedId];
+          const queue = [seedId];
+          while (queue.length && cluster.length < CONFIG.startClusterSize) {
             const current = queue.shift();
             for (const neighborId of this.shuffle([...territories[current].neighbors])) {
               if (claimed.has(neighborId)) continue;
               claimed.add(neighborId);
               cluster.push(neighborId);
               queue.push(neighborId);
-              if (cluster.length === 5) break;
+              if (cluster.length === CONFIG.startClusterSize) break;
             }
           }
-          if (cluster.length < 5) return null;
+          if (cluster.length < CONFIG.startClusterSize) return null;
           clusters.push(cluster);
         }
         return clusters;
@@ -274,22 +504,26 @@
 
     const CombatResolver = {
       effectiveEntryForce(armies, terrain) { return terrain === "forest" ? Math.max(1, armies - 1) : armies; },
-      coord(territory) { return territory ? `[${territory.x + 1},${territory.y + 1}]` : "the frontier"; },
+      label(territory) { return territory ? territory.name : "the frontier"; },
       ownerName(state, ownerId) { return ownerId === -1 ? "the neutral frontier" : state.players[ownerId]?.name || "nobody"; },
       canResolve(order, source, target) {
-        return Boolean(source && target && source.ownerId === order.playerId && source.neighbors.includes(target.id) && target.ownerId !== null && source.armies > order.armies);
+        return Boolean(source && target && source.ownerId === order.playerId && source.neighbors.includes(target.id) && source.armies > order.armies);
       },
       resolveMove(order, state) {
-        const source = state.getTerritory(order.fromId), target = state.getTerritory(order.toId), name = state.players[order.playerId].name;
-        if (!this.canResolve(order, source, target)) return `${name} loses the march from ${this.coord(source)}.`;
+        const source = state.getTerritory(order.fromId);
+        const target = state.getTerritory(order.toId);
+        const name = state.players[order.playerId].name;
+        if (!this.canResolve(order, source, target)) return `${name} loses the march from ${this.label(source)}.`;
         source.armies -= order.armies;
         const moved = this.effectiveEntryForce(order.armies, target.terrain);
         target.armies += moved;
-        return `${name} shifts ${moved} armies to ${this.coord(target)}.`;
+        return `${name} shifts ${moved} armies to ${this.label(target)}.`;
       },
       resolveAttack(order, state) {
-        const source = state.getTerritory(order.fromId), target = state.getTerritory(order.toId), name = state.players[order.playerId].name;
-        if (!this.canResolve(order, source, target)) return `${name} fails to attack ${this.coord(target)}.`;
+        const source = state.getTerritory(order.fromId);
+        const target = state.getTerritory(order.toId);
+        const name = state.players[order.playerId].name;
+        if (!this.canResolve(order, source, target)) return `${name} fails to attack ${this.label(target)}.`;
         source.armies -= order.armies;
         const effectiveAttack = this.effectiveEntryForce(order.armies, target.terrain);
         const terrainModifier = CONFIG.terrainDefense[target.terrain];
@@ -300,105 +534,212 @@
           const hold = Math.max(1, effectiveAttack - Math.ceil((target.armies * terrainModifier) / 2));
           target.ownerId = order.playerId;
           target.armies = hold;
-          return `${name} captures ${this.coord(target)} from ${this.ownerName(state, previousOwner)} with ${hold} armies.`;
+          return `${name} captures ${this.label(target)} from ${this.ownerName(state, previousOwner)} with ${hold} armies.`;
         }
         const chip = Math.max(0, Math.floor(effectiveAttack / (2 * terrainModifier)));
         target.armies = Math.max(1, target.armies - chip);
-        return `${name} is repelled at ${this.coord(target)}; defenders lose ${chip}.`;
+        return `${name} is repelled at ${this.label(target)}; defenders lose ${chip}.`;
       }
     };
 
     class Renderer {
-      constructor(canvas) { this.canvas = canvas; this.ctx = canvas.getContext("2d"); }
+      constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext("2d");
+      }
+
       territoryFromEvent(event, state) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = Math.floor(((event.clientX - rect.left) / rect.width) * this.canvas.width / CONFIG.cellSize);
-        const y = Math.floor(((event.clientY - rect.top) / rect.height) * this.canvas.height / CONFIG.cellSize);
-        return x < 0 || y < 0 || x >= CONFIG.width || y >= CONFIG.height ? null : state.grid[y][x];
+        const x = ((event.clientX - rect.left) / rect.width) * this.canvas.width;
+        const y = ((event.clientY - rect.top) / rect.height) * this.canvas.height;
+        if (!state.worldProfile || !MapGenerator.pointInWorld(state.worldProfile, x, y)) return null;
+        const hit = state.territories.find((territory) => this.pointInPolygon({ x, y }, territory.polygon));
+        return hit ? hit.id : null;
       }
+
       render(state) {
         const { ctx } = this;
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.drawOcean(ctx);
+        if (!state.worldProfile) return;
         const selected = state.selectedTerritoryId === null ? null : state.getTerritory(state.selectedTerritoryId);
         const targetSet = new Set(selected ? selected.neighbors : []);
-        for (const territory of state.territories) this.drawCell(ctx, state, territory, selected, targetSet);
+        this.drawWorldBackplate(ctx, state.worldProfile);
+        ctx.save();
+        this.traceWorldPath(ctx, state.worldProfile);
+        ctx.clip();
+        state.territories.forEach((territory) => this.drawCountry(ctx, territory, CONFIG.hiddenCountryColor, CONFIG.hiddenBorder));
+        state.territories.forEach((territory) => {
+          if (!state.visibleIds.has(territory.id)) return;
+          const fill = territory.ownerId === -1 ? CONFIG.neutralColor : state.players[territory.ownerId].color;
+          this.drawCountry(ctx, territory, fill, "rgba(255,255,255,.16)");
+          ctx.fillStyle = CONFIG.terrainTint[territory.terrain];
+          this.tracePolygon(ctx, territory.polygon);
+          ctx.fill();
+          if (selected && territory.id === selected.id) this.strokeCountry(ctx, territory, "#ffdf8b", 4);
+          else if (targetSet.has(territory.id)) this.strokeCountry(ctx, territory, "rgba(107,234,214,.9)", 3);
+        });
+        ctx.restore();
+        this.drawWorldOutline(ctx, state.worldProfile);
         this.drawOrders(ctx, state);
+        this.drawLabels(ctx, state);
         if (state.winnerId !== null) this.drawBanner(ctx, `${state.players[state.winnerId].name} ascends`);
       }
-      drawCell(ctx, state, territory, selected, targetSet) {
-        const x = territory.x * CONFIG.cellSize, y = territory.y * CONFIG.cellSize, visible = state.visibleIds.has(territory.id);
-        ctx.fillStyle = this.baseColor(state, territory, visible);
-        ctx.fillRect(x, y, CONFIG.cellSize, CONFIG.cellSize);
-        if (visible && territory.terrain !== "water") {
-          ctx.fillStyle = CONFIG.terrainTint[territory.terrain];
-          ctx.fillRect(x, y, CONFIG.cellSize, CONFIG.cellSize);
+
+      drawOcean(ctx) {
+        const gradient = ctx.createLinearGradient(0, 0, this.canvas.width, this.canvas.height);
+        gradient.addColorStop(0, CONFIG.oceanDeep);
+        gradient.addColorStop(0.5, CONFIG.oceanMid);
+        gradient.addColorStop(1, CONFIG.oceanShallow);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.strokeStyle = "rgba(255,255,255,.03)";
+        for (let y = 48; y < this.canvas.height; y += 36) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(this.canvas.width, y);
+          ctx.stroke();
         }
-        if (!visible) {
-          ctx.fillStyle = CONFIG.fogColor;
-          ctx.fillRect(x, y, CONFIG.cellSize, CONFIG.cellSize);
-        }
-        ctx.strokeStyle = "rgba(255,255,255,.08)";
-        ctx.strokeRect(x + .5, y + .5, CONFIG.cellSize - 1, CONFIG.cellSize - 1);
-        if (selected && territory.id === selected.id) this.outlineCell(ctx, x, y, "#ffdf8b", 3, 2);
-        else if (selected && targetSet.has(territory.id) && visible) this.outlineCell(ctx, x, y, "rgba(107,234,214,.9)", 2, 3);
-        if (visible && territory.terrain !== "water") this.drawArmyText(ctx, territory, x, y);
       }
-      outlineCell(ctx, x, y, color, width, inset) {
-        ctx.strokeStyle = color; ctx.lineWidth = width;
-        ctx.strokeRect(x + inset, y + inset, CONFIG.cellSize - inset * 2, CONFIG.cellSize - inset * 2);
+
+      drawWorldBackplate(ctx, profile) {
+        this.traceWorldPath(ctx, profile);
+        ctx.fillStyle = CONFIG.fogFill;
+        ctx.fill();
+      }
+
+      drawWorldOutline(ctx, profile) {
+        this.traceWorldPath(ctx, profile);
+        ctx.strokeStyle = CONFIG.coastLine;
+        ctx.lineWidth = 2;
+        ctx.stroke();
         ctx.lineWidth = 1;
       }
-      drawArmyText(ctx, territory, x, y) {
-        ctx.fillStyle = "#f8f5eb"; ctx.font = "bold 15px Trebuchet MS"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 4;
-        ctx.fillText(String(territory.armies), x + CONFIG.cellSize / 2, y + CONFIG.cellSize / 2);
-        ctx.shadowBlur = 0; ctx.font = "11px Trebuchet MS"; ctx.fillStyle = "rgba(255,255,255,.75)";
-        const glyph = territory.terrain === "forest" ? "F" : territory.terrain === "mountains" ? "M" : "";
-        if (glyph) ctx.fillText(glyph, x + CONFIG.cellSize - 9, y + 9);
+
+      drawCountry(ctx, territory, fill, stroke) {
+        this.tracePolygon(ctx, territory.polygon);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
-      baseColor(state, territory, visible) {
-        if (!visible) return "#151c29";
-        if (territory.terrain === "water") return "#264c80";
-        if (territory.ownerId === -1) return CONFIG.neutralColor;
-        return state.players[territory.ownerId].color;
+
+      strokeCountry(ctx, territory, stroke, width) {
+        this.tracePolygon(ctx, territory.polygon);
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = width;
+        ctx.stroke();
+        ctx.lineWidth = 1;
       }
-      drawOrders(ctx, state) {
-        state.queuedOrders.forEach((order) => {
-          const from = state.getTerritory(order.fromId), to = state.getTerritory(order.toId);
-          if (!state.visibleIds.has(from.id) && !state.visibleIds.has(to.id)) return;
-          ctx.strokeStyle = order.type === "attack" ? "rgba(255,123,107,.9)" : "rgba(116,225,192,.9)";
-          ctx.lineWidth = 3; ctx.beginPath();
-          ctx.moveTo(from.x * CONFIG.cellSize + CONFIG.cellSize / 2, from.y * CONFIG.cellSize + CONFIG.cellSize / 2);
-          ctx.lineTo(to.x * CONFIG.cellSize + CONFIG.cellSize / 2, to.y * CONFIG.cellSize + CONFIG.cellSize / 2);
-          ctx.stroke(); ctx.lineWidth = 1;
+
+      drawLabels(ctx, state) {
+        state.territories.forEach((territory) => {
+          if (!state.visibleIds.has(territory.id)) return;
+          ctx.fillStyle = "rgba(8,12,20,.6)";
+          ctx.beginPath();
+          ctx.arc(territory.x, territory.y, 16, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#f8f5eb";
+          ctx.font = "bold 15px Trebuchet MS";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(String(territory.armies), territory.x, territory.y);
+          ctx.font = "11px Trebuchet MS";
+          ctx.fillStyle = "rgba(255,255,255,.75)";
+          const glyph = territory.terrain === "forest" ? "F" : territory.terrain === "mountains" ? "M" : "";
+          if (glyph) ctx.fillText(glyph, territory.x + 16, territory.y - 14);
         });
       }
+
+      drawOrders(ctx, state) {
+        state.queuedOrders.forEach((order) => {
+          const from = state.getTerritory(order.fromId);
+          const to = state.getTerritory(order.toId);
+          if (!state.visibleIds.has(from.id) && !state.visibleIds.has(to.id)) return;
+          ctx.strokeStyle = order.type === "attack" ? "rgba(255,123,107,.9)" : "rgba(116,225,192,.9)";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(from.x, from.y);
+          ctx.lineTo(to.x, to.y);
+          ctx.stroke();
+          ctx.lineWidth = 1;
+        });
+      }
+
       drawBanner(ctx, text) {
         ctx.fillStyle = "rgba(3,8,14,.74)";
         ctx.fillRect(0, this.canvas.height / 2 - 58, this.canvas.width, 116);
-        ctx.fillStyle = "#ffde92"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillStyle = "#ffde92";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
         ctx.font = 'bold 34px "Palatino Linotype", Georgia, serif';
         ctx.fillText(text, this.canvas.width / 2, this.canvas.height / 2);
+      }
+
+      tracePolygon(ctx, polygon) {
+        ctx.beginPath();
+        ctx.moveTo(polygon[0].x, polygon[0].y);
+        for (let i = 1; i < polygon.length; i += 1) ctx.lineTo(polygon[i].x, polygon[i].y);
+        ctx.closePath();
+      }
+
+      traceWorldPath(ctx, profile) {
+        ctx.beginPath();
+        profile.continents.forEach((continent) => {
+          ctx.moveTo(continent.cx + continent.rx, continent.cy);
+          ctx.ellipse(continent.cx, continent.cy, continent.rx, continent.ry, 0, 0, Math.PI * 2);
+        });
+        profile.bridges.forEach((bridge) => this.traceCapsule(ctx, bridge));
+      }
+
+      traceCapsule(ctx, bridge) {
+        const angle = Math.atan2(bridge.y2 - bridge.y1, bridge.x2 - bridge.x1);
+        ctx.moveTo(
+          bridge.x1 + Math.cos(angle + Math.PI / 2) * bridge.r,
+          bridge.y1 + Math.sin(angle + Math.PI / 2) * bridge.r
+        );
+        ctx.arc(bridge.x1, bridge.y1, bridge.r, angle + Math.PI / 2, angle - Math.PI / 2, true);
+        ctx.arc(bridge.x2, bridge.y2, bridge.r, angle - Math.PI / 2, angle + Math.PI / 2, true);
+        ctx.closePath();
+      }
+
+      pointInPolygon(point, polygon) {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+          const xi = polygon[i].x, yi = polygon[i].y;
+          const xj = polygon[j].x, yj = polygon[j].y;
+          const intersects = ((yi > point.y) !== (yj > point.y)) &&
+            (point.x < ((xj - xi) * (point.y - yi)) / ((yj - yi) || 1e-9) + xi);
+          if (intersects) inside = !inside;
+        }
+        return inside;
       }
     }
 
     class TurnManager {
       constructor(state, renderer, ui) {
-        this.state = state; this.renderer = renderer; this.ui = ui; this.busy = false; this.aiSequence = 0;
+        this.state = state;
+        this.renderer = renderer;
+        this.ui = ui;
+        this.busy = false;
+        this.aiSequence = 0;
       }
 
       newGame(playerCount) {
-        this.aiSequence += 1; this.busy = false;
+        this.aiSequence += 1;
+        this.busy = false;
         this.state = new GameState(playerCount);
-        Object.assign(this.state, MapGenerator.generate(CONFIG.width, CONFIG.height, playerCount));
+        Object.assign(this.state, MapGenerator.generate(playerCount));
         this.state.reinforcementsLeft = this.reinforcementFor(this.state.currentPlayer().id);
-        this.state.pushLog(`A new frontier rises for ${playerCount} houses.`);
+        this.state.pushLog(`A new world rises for ${playerCount} houses.`);
         this.sync();
       }
 
       handleBoardClick(territoryId) {
         if (territoryId === null || this.busy || this.state.winnerId !== null) return;
-        const territory = this.state.getTerritory(territoryId), player = this.state.currentPlayer();
+        const territory = this.state.getTerritory(territoryId);
+        const player = this.state.currentPlayer();
         if (!player.isHuman || !territory || !this.state.visibleIds.has(territoryId)) return;
         if (this.state.phase === "reinforcement") return void this.placeReinforcement(territory);
         if (this.state.phase === "order") this.handleOrderClick(territory);
@@ -420,7 +761,7 @@
         if (!selected) return void this.selectTerritory(territory);
         if (territory.id === selected.id) return void this.clearSelection();
         if (territory.ownerId === 0 && !selected.neighbors.includes(territory.id)) return void this.selectTerritory(territory);
-        if (!selected.neighbors.includes(territory.id) || territory.ownerId === null) return;
+        if (!selected.neighbors.includes(territory.id)) return;
         this.queueOrder(selected, territory);
       }
 
@@ -431,17 +772,33 @@
         this.sync();
       }
 
-      clearSelection() { this.state.selectedTerritoryId = null; this.state.sendArmies = 1; this.sync(); }
-      setSendArmies(value) { this.state.sendArmies = Math.max(1, value); this.sync(); }
-      hasQueuedSource(territoryId) { return this.state.queuedOrders.some((order) => order.fromId === territoryId); }
-      reinforcementFor(playerId) { return Math.max(3, Math.floor(this.state.controlledCount(playerId) / 6)); }
+      clearSelection() {
+        this.state.selectedTerritoryId = null;
+        this.state.sendArmies = 1;
+        this.sync();
+      }
+
+      setSendArmies(value) {
+        this.state.sendArmies = Math.max(1, value);
+        this.sync();
+      }
+
+      hasQueuedSource(territoryId) {
+        return this.state.queuedOrders.some((order) => order.fromId === territoryId);
+      }
+
+      reinforcementFor(playerId) {
+        return Math.max(3, Math.floor(this.state.controlledCount(playerId) / 4));
+      }
 
       queueOrder(source, target) {
         const playerId = this.state.currentPlayer().id;
-        if (this.hasQueuedSource(source.id) || source.ownerId !== playerId || source.armies < 2 || !source.neighbors.includes(target.id) || target.ownerId === null) return;
+        if (this.hasQueuedSource(source.id) || source.ownerId !== playerId || source.armies < 2 || !source.neighbors.includes(target.id)) return;
         const armies = clamp(this.state.sendArmies, 1, source.armies - 1);
         this.state.queuedOrders.push({ type: target.ownerId === playerId ? "move" : "attack", fromId: source.id, toId: target.id, armies, playerId });
-        this.state.selectedTerritoryId = null; this.state.sendArmies = 1; this.sync();
+        this.state.selectedTerritoryId = null;
+        this.state.sendArmies = 1;
+        this.sync();
       }
 
       removeOrder(index) {
@@ -477,7 +834,9 @@
         this.state.currentPlayerIndex = nextIndex;
         this.state.phase = "reinforcement";
         this.state.reinforcementsLeft = this.reinforcementFor(this.state.currentPlayer().id);
-        this.state.selectedTerritoryId = null; this.state.sendArmies = 1; this.state.queuedOrders = [];
+        this.state.selectedTerritoryId = null;
+        this.state.sendArmies = 1;
+        this.state.queuedOrders = [];
         this.sync();
         this.maybeRunAi();
       }
@@ -507,10 +866,8 @@
       }
 
       checkVictory() {
-        const passable = this.state.territories.filter((territory) => territory.ownerId !== null);
-        if (!passable.length) return false;
-        const firstOwner = passable[0].ownerId;
-        if (firstOwner >= 0 && passable.every((territory) => territory.ownerId === firstOwner)) {
+        const firstOwner = this.state.territories[0]?.ownerId;
+        if (firstOwner >= 0 && this.state.territories.every((territory) => territory.ownerId === firstOwner)) {
           this.state.winnerId = firstOwner;
           this.state.pushLog(`${this.state.players[firstOwner].name} controls the entire world.`);
           return true;
@@ -555,7 +912,8 @@
       }
 
       aiPlanOrders(playerId) {
-        const orders = [], used = new Set();
+        const orders = [];
+        const used = new Set();
         const owned = [...this.state.playerTerritories(playerId)].sort((a, b) => b.armies - a.armies);
         for (const territory of owned) {
           if (orders.length >= CONFIG.maxAiOrders) break;
@@ -565,9 +923,10 @@
             .filter((neighbor) => neighbor.ownerId !== playerId)
             .sort((a, b) => (a.armies * CONFIG.terrainDefense[a.terrain]) - (b.armies * CONFIG.terrainDefense[b.terrain]));
           if (!enemies.length) continue;
-          const target = enemies[0], armies = territory.armies - 1;
+          const target = enemies[0];
+          const armies = territory.armies - 1;
           const effective = CombatResolver.effectiveEntryForce(armies, target.terrain);
-          const threshold = target.armies * CONFIG.terrainDefense[target.terrain] * 1.1;
+          const threshold = target.armies * CONFIG.terrainDefense[target.terrain] * 1.08;
           if (effective > threshold) {
             orders.push({ type: "attack", fromId: territory.id, toId: target.id, armies, playerId });
             used.add(territory.id);
@@ -588,8 +947,14 @@
         return orders;
       }
 
-      borderTerritories(playerId) { return this.state.playerTerritories(playerId).filter((territory) => this.isBorder(territory, playerId)); }
-      isBorder(territory, playerId) { return territory.neighbors.some((neighborId) => this.state.getTerritory(neighborId).ownerId !== playerId); }
+      borderTerritories(playerId) {
+        return this.state.playerTerritories(playerId).filter((territory) => this.isBorder(territory, playerId));
+      }
+
+      isBorder(territory, playerId) {
+        return territory.neighbors.some((neighborId) => this.state.getTerritory(neighborId).ownerId !== playerId);
+      }
+
       pickWeakestTerritory(playerId, borderOnly) {
         const pool = borderOnly ? this.borderTerritories(playerId) : this.state.playerTerritories(playerId);
         return [...pool].sort((a, b) => a.armies - b.armies)[0] || null;
@@ -597,7 +962,9 @@
 
       findOwnedStep(playerId, startId, targetId) {
         if (startId === targetId) return null;
-        const queue = [startId], seen = new Set([startId]), previous = new Map();
+        const queue = [startId];
+        const seen = new Set([startId]);
+        const previous = new Map();
         while (queue.length) {
           const id = queue.shift();
           if (id === targetId) break;
@@ -617,8 +984,15 @@
         return step;
       }
 
-      pause(ms) { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
-      sync() { this.computeVisibility(); this.renderer.render(this.state); this.renderUi(); }
+      pause(ms) {
+        return new Promise((resolve) => window.setTimeout(resolve, ms));
+      }
+
+      sync() {
+        this.computeVisibility();
+        this.renderer.render(this.state);
+        this.renderUi();
+      }
 
       renderUi() {
         const player = this.state.currentPlayer();
@@ -628,13 +1002,14 @@
         this.ui.playerValue.innerHTML = `<span class="player-pill"><i class="dot" style="background:${player.color}"></i>${player.name}${player.isHuman ? " (You)" : " (AI)"}</span>`;
         this.renderSelection();
         this.ui.playerList.innerHTML = this.state.players.map((playerItem) => {
-          const status = playerItem.eliminated ? "Eliminated" : `${this.state.controlledCount(playerItem.id)} territories`;
+          const status = playerItem.eliminated ? "Eliminated" : `${this.state.controlledCount(playerItem.id)} countries`;
           return `<li><span class="player-pill"><i class="dot" style="background:${playerItem.color}"></i>${playerItem.name}${playerItem.isHuman ? " (You)" : ""}</span><span class="muted">${status}</span></li>`;
         }).join("");
         this.ui.queueList.innerHTML = this.state.queuedOrders.length ? this.state.queuedOrders.map((order, index) => {
-          const from = this.state.getTerritory(order.fromId), to = this.state.getTerritory(order.toId);
+          const from = this.state.getTerritory(order.fromId);
+          const to = this.state.getTerritory(order.toId);
           const remove = this.state.currentPlayer().isHuman && this.state.phase === "order" ? `<button type="button" data-remove="${index}">Remove</button>` : "";
-          return `<li>${remove}${cap(order.type)} ${order.armies} from [${from.x + 1},${from.y + 1}] to [${to.x + 1},${to.y + 1}]</li>`;
+          return `<li>${remove}${cap(order.type)} ${order.armies} from ${from.name} to ${to.name}</li>`;
         }).join("") : `<li class="muted">No orders queued.</li>`;
         this.ui.logList.innerHTML = this.state.combatLog.map((entry) => `<li>${entry}</li>`).join("");
         this.ui.resolveBtn.disabled = this.busy || this.state.winnerId !== null || !player.isHuman || this.state.phase !== "order";
@@ -644,14 +1019,14 @@
       renderSelection() {
         const territory = this.state.selectedTerritoryId === null ? null : this.state.getTerritory(this.state.selectedTerritoryId);
         const items = territory ? [
-          ["Territory", `[${territory.x + 1},${territory.y + 1}]`],
+          ["Country", territory.name],
           ["Terrain", territory.terrain],
           ["Owner", territory.ownerId === 0 ? "Aureline Dominion" : this.state.players[territory.ownerId]?.name || "Neutral"],
           ["Armies", territory.armies]
         ] : [
-          ["Territory", "None"],
+          ["Country", "None"],
           ["Terrain", "Select your land"],
-          ["Owner", "Visible friendly territory"],
+          ["Owner", "Visible friendly country"],
           ["Armies", "-"]
         ];
         this.ui.selectionInfo.innerHTML = items.map(([label, value]) => `<div class="panel-slot"><span class="label">${label}</span><span class="value">${value}</span></div>`).join("");
