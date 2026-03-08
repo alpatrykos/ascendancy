@@ -70,7 +70,7 @@
     <div class="masthead">
       <div>
         <h1>Ascendancy</h1>
-        <p class="subtitle">Forge an empire across a node-based world map. Expand through connected country silhouettes, break narrow border chains, and outmaneuver rival houses before they consume the map.</p>
+        <p class="subtitle">Forge an empire across a full Voronoi world map. Continents emerge from clustered countries, seas claim the cells between them, and every campaign opens on a fresh geopolitical fracture line.</p>
       </div>
       <div class="card">
         <h2>New Campaign</h2>
@@ -97,7 +97,7 @@
         <div class="legend">
           <span><i class="swatch" style="background:#406b34"></i>Forest countries slow armies by 1 on entry</span>
           <span><i class="swatch" style="background:#8a9099"></i>Mountains defend at 1.4x</span>
-          <span><i class="swatch" style="background:#244e84"></i>Oceans split the graph into coastlines and chokepoints</span>
+          <span><i class="swatch" style="background:#244e84"></i>Water cells become sea, carving coastlines and chokepoints</span>
           <span><i class="swatch" style="background:#121a27"></i>Fog hides control, but country silhouettes remain readable</span>
         </div>
       </div>
@@ -189,7 +189,7 @@
 
   <script>
     const CONFIG = {
-      mapWidth: 720, mapHeight: 720, nodeCount: 36, minNodeDistance: 58, startClusterSize: 5,
+      mapWidth: 720, mapHeight: 720, nodeCount: 52, minNodeDistance: 48, startClusterSize: 5,
       minSeedDistance: 170, maxAiOrders: 6,
       terrainDefense: { plains: 1, forest: 1.15, mountains: 1.4 },
       colors: ["#f0bd55", "#c95a48", "#4aa89f", "#8470d5"],
@@ -243,6 +243,7 @@
     class Territory {
       constructor(id, x, y, name, terrain, polygon) {
         this.id = id;
+        this.sourceId = id;
         this.x = x;
         this.y = y;
         this.name = name;
@@ -290,10 +291,10 @@
     const MapGenerator = {
       generate(playerCount = 3) {
         for (let attempt = 0; attempt < 240; attempt += 1) {
-          const profile = this.createProfile();
-          const points = this.sampleNodes(profile);
+          const seed = Array.from({ length: 6 }, () => Math.random() * Math.PI * 2);
+          const points = this.sampleNodes(seed);
           if (!points) continue;
-          const world = this.buildWorldFromLayout(profile, points, playerCount, true);
+          const world = this.buildWorldFromFullMap(points, playerCount, seed, true);
           if (world) return world;
         }
         throw new Error("Unable to generate a valid map.");
@@ -313,20 +314,58 @@
         ));
         this.buildNeighbors(territories, profile);
         if (!territories.length || !this.isConnected(territories)) return null;
-        const polygons = this.deformPolygons(basePolygons, profile);
+        const seed = profile.seed || Array.from({ length: 6 }, (_, index) => index * 0.71 + 1);
+        const maskProfile = this.buildMaskProfile(basePolygons, seed, points.map((point, index) => ({
+          x: point.x,
+          y: point.y,
+          land: true,
+          name: point.name,
+          terrain: point.terrain || territories[index].terrain,
+          ownerId: Number.isInteger(point.ownerId) ? point.ownerId : -1,
+          armies: clamp(Number(point.armies) || 1, 1, 99)
+        })));
+        const polygons = this.deformPolygons(basePolygons, maskProfile);
         polygons.forEach((polygon, id) => { territories[id].polygon = polygon; });
         territories.forEach((territory, id) => {
           territory.ownerId = Number.isInteger(points[id].ownerId) ? points[id].ownerId : -1;
           territory.armies = clamp(Number(points[id].armies) || 1, 1, 99);
           if (territory.ownerId >= playerCount) territory.ownerId = -1;
+          territory.sourceId = id;
         });
         if (autoSeed) this.seedTerritories(territories, playerCount);
-        return { territories, worldProfile: cloneJson(profile) };
+        return {
+          territories,
+          worldProfile: this.buildWorldProfile(territories, points.map((point, index) => ({
+            x: point.x,
+            y: point.y,
+            land: true,
+            name: point.name,
+            terrain: territories[index].terrain,
+            ownerId: territories[index].ownerId,
+            armies: territories[index].armies,
+            continentId: 0
+          })), new Set(points.map((_, index) => index)), seed, Array(points.length).fill(0))
+        };
       },
 
       buildWorldFromTemplate(template) {
-        if (!template || !Array.isArray(template.points) || !template.points.length || !template.profile) return null;
+        if (!template) return null;
         const playerCount = clamp(Number(template.playerCount) || 3, 2, 4);
+        if (Array.isArray(template.fullPoints) && template.fullPoints.length) {
+          const seed = template.profile?.seed || Array.from({ length: 6 }, (_, index) => index * 0.91 + 0.3);
+          const fullPoints = template.fullPoints.map((point, index) => ({
+            x: clamp(Number(point.x) || 0, 24, CONFIG.mapWidth - 24),
+            y: clamp(Number(point.y) || 0, 24, CONFIG.mapHeight - 24),
+            land: point.land !== false,
+            name: String(point.name || `March ${index + 1}`).slice(0, 32) || `March ${index + 1}`,
+            terrain: ["plains", "forest", "mountains"].includes(point.terrain) ? point.terrain : undefined,
+            ownerId: Number.isInteger(point.ownerId) ? point.ownerId : -1,
+            armies: clamp(Number(point.armies) || 1, 1, 99),
+            continentId: Number.isInteger(point.continentId) ? point.continentId : -1
+          }));
+          return this.buildWorldFromFullMap(fullPoints, playerCount, seed, false);
+        }
+        if (!Array.isArray(template.points) || !template.points.length || !template.profile) return null;
         const profile = cloneJson(template.profile);
         const points = template.points.map((point, index) => {
           const x = clamp(Number(point.x) || 0, 24, CONFIG.mapWidth - 24);
@@ -346,6 +385,347 @@
           ...world,
           playerCount
         } : null;
+      },
+
+      buildWorldFromFullMap(fullPoints, playerCount = 3, seed = [], autoSeed = false) {
+        const normalizedSeed = seed.length ? seed : Array.from({ length: 6 }, (_, index) => index * 0.83 + 0.5);
+        const points = fullPoints.map((point, index) => ({
+          x: clamp(Number(point.x) || 0, 24, CONFIG.mapWidth - 24),
+          y: clamp(Number(point.y) || 0, 24, CONFIG.mapHeight - 24),
+          land: point.land,
+          name: String(point.name || `March ${index + 1}`).slice(0, 32) || `March ${index + 1}`,
+          terrain: ["plains", "forest", "mountains"].includes(point.terrain) ? point.terrain : undefined,
+          ownerId: Number.isInteger(point.ownerId) ? point.ownerId : -1,
+          armies: clamp(Number(point.armies) || 1, 1, 99),
+          continentId: Number.isInteger(point.continentId) ? point.continentId : -1
+        }));
+        const basePolygons = this.buildVoronoi(points);
+        if (!basePolygons) return null;
+        const allNeighbors = this.buildNeighborGraph(basePolygons);
+        const hasLandFlags = points.every((point) => typeof point.land === "boolean");
+        let landSet = new Set();
+        let continentIds = Array(points.length).fill(-1);
+        if (hasLandFlags) {
+          points.forEach((point, index) => {
+            if (point.land) landSet.add(index);
+            continentIds[index] = point.continentId;
+          });
+        } else {
+          const grouped = this.groupNearbyIntoContinents(points, allNeighbors, playerCount, normalizedSeed);
+          if (!grouped) return null;
+          landSet = grouped.landSet;
+          continentIds = grouped.continentIds;
+          points.forEach((point, index) => { point.land = landSet.has(index); });
+        }
+        if (landSet.size < playerCount * CONFIG.startClusterSize) return null;
+        const landIds = [...landSet];
+        const landNeighbors = this.filterLandNeighbors(allNeighbors, landSet);
+        if (!this.isConnectedSubset(landNeighbors, landIds)) return null;
+        const continentCenters = this.computeContinentCenters(points, continentIds);
+        const landIndex = new Map(landIds.map((oldId, newId) => [oldId, newId]));
+        const rawLandPolygons = landIds.map((oldId) => basePolygons[oldId]);
+        const initialProfile = this.buildMaskProfile(rawLandPolygons, normalizedSeed, points);
+        const territories = landIds.map((oldId, newId) => {
+          const point = points[oldId];
+          const territory = new Territory(
+            newId,
+            point.x,
+            point.y,
+            point.name,
+            point.terrain || this.assignTerrain(point, { seed: normalizedSeed, continentCenters }),
+            rawLandPolygons[newId]
+          );
+          territory.sourceId = oldId;
+          territory.ownerId = point.ownerId;
+          territory.armies = point.armies;
+          territory.neighbors = landNeighbors[oldId].map((neighborId) => landIndex.get(neighborId)).filter((neighborId) => neighborId !== undefined).sort((a, b) => a - b);
+          return territory;
+        });
+        const polygons = this.deformPolygons(rawLandPolygons, initialProfile);
+        polygons.forEach((polygon, id) => { territories[id].polygon = polygon; });
+        if (!this.isConnected(territories)) return null;
+        if (autoSeed && !this.seedTerritories(territories, playerCount)) return null;
+        return {
+          territories,
+          worldProfile: this.buildWorldProfile(territories, points, landSet, normalizedSeed, continentIds)
+        };
+      },
+
+      buildNeighborGraph(polygons) {
+        const neighbors = polygons.map(() => []);
+        for (let i = 0; i < polygons.length; i += 1) {
+          for (let j = i + 1; j < polygons.length; j += 1) {
+            if (!this.shareBorder(polygons[i], polygons[j])) continue;
+            neighbors[i].push(j);
+            neighbors[j].push(i);
+          }
+        }
+        return neighbors.map((list) => [...new Set(list)].sort((a, b) => a - b));
+      },
+
+      filterLandNeighbors(allNeighbors, landSet) {
+        return allNeighbors.map((neighbors, index) => landSet.has(index) ? neighbors.filter((neighborId) => landSet.has(neighborId)) : []);
+      },
+
+      isConnectedSubset(neighbors, ids) {
+        if (!ids.length) return false;
+        const allowed = new Set(ids);
+        const seen = new Set();
+        const queue = [ids[0]];
+        while (queue.length) {
+          const id = queue.shift();
+          if (seen.has(id)) continue;
+          seen.add(id);
+          neighbors[id].forEach((neighborId) => {
+            if (allowed.has(neighborId) && !seen.has(neighborId)) queue.push(neighborId);
+          });
+        }
+        return seen.size === ids.length;
+      },
+
+      groupNearbyIntoContinents(points, neighbors, playerCount, seed) {
+        const continentCount = clamp(4 + Math.floor(Math.random() * 3), 4, 6);
+        const seedIds = this.chooseMapSeeds(points, continentCount, 140) || this.chooseMapSeeds(points, continentCount, 92);
+        if (!seedIds) return null;
+        const minimumLand = Math.max(playerCount * CONFIG.startClusterSize + 6, Math.floor(points.length * 0.64));
+        const targetLand = clamp(Math.round(points.length * rand(0.68, 0.78)), minimumLand, points.length - 6);
+        const targets = this.distributeContinentSizes(targetLand, continentCount, seed);
+        const continents = seedIds.map((seedId, index) => ({
+          id: index,
+          seedId,
+          cells: [seedId],
+          target: targets[index],
+          frontier: new Set(neighbors[seedId])
+        }));
+        const landSet = new Set(seedIds);
+        const continentIds = Array(points.length).fill(-1);
+        continents.forEach((continent) => { continentIds[continent.seedId] = continent.id; });
+        while (landSet.size < targetLand) {
+          const options = continents
+            .filter((continent) => continent.cells.length < continent.target)
+            .sort((a, b) => (a.cells.length / a.target) - (b.cells.length / b.target));
+          if (!options.length) break;
+          let expanded = false;
+          for (const continent of options) {
+            const candidate = this.pickContinentCandidate(continent, continents, points, landSet, seed);
+            if (candidate === null) continue;
+            landSet.add(candidate);
+            continentIds[candidate] = continent.id;
+            continent.cells.push(candidate);
+            continent.frontier.delete(candidate);
+            neighbors[candidate].forEach((neighborId) => {
+              if (!landSet.has(neighborId)) continent.frontier.add(neighborId);
+            });
+            expanded = true;
+            if (landSet.size >= targetLand) break;
+          }
+          if (!expanded) return null;
+        }
+        if (landSet.size < minimumLand) return null;
+        if (!this.connectContinents(points, neighbors, landSet, continentIds, seedIds)) return null;
+        points.forEach((point, index) => { point.land = landSet.has(index); });
+        return { landSet, continentIds };
+      },
+
+      chooseMapSeeds(points, count, minDistance) {
+        const seeds = [];
+        const candidates = this.shuffle(points.map((point, index) => ({ ...point, id: index })));
+        for (const candidate of candidates) {
+          if (seeds.every((seedId) => dist(points[seedId], candidate) >= minDistance)) seeds.push(candidate.id);
+          if (seeds.length === count) return seeds;
+        }
+        return null;
+      },
+
+      distributeContinentSizes(total, count, seed) {
+        const minimum = 4;
+        const weights = Array.from({ length: count }, (_, index) => 0.9 + Math.abs(Math.sin(seed[index % seed.length] + index * 1.31)) * 0.8);
+        const weightTotal = weights.reduce((sum, value) => sum + value, 0) || 1;
+        const sizes = weights.map((weight) => Math.max(minimum, Math.round((total * weight) / weightTotal)));
+        while (sizes.reduce((sum, value) => sum + value, 0) < total) sizes[sizes.indexOf(Math.min(...sizes))] += 1;
+        while (sizes.reduce((sum, value) => sum + value, 0) > total) {
+          const index = sizes.findIndex((value) => value === Math.max(...sizes) && value > minimum);
+          if (index === -1) break;
+          sizes[index] -= 1;
+        }
+        return sizes;
+      },
+
+      pickContinentCandidate(continent, continents, points, landSet, seed) {
+        const candidates = [...continent.frontier].filter((id) => !landSet.has(id));
+        if (!candidates.length) return null;
+        const centroid = continent.cells.reduce((sum, id) => ({
+          x: sum.x + points[id].x,
+          y: sum.y + points[id].y
+        }), { x: 0, y: 0 });
+        centroid.x /= continent.cells.length;
+        centroid.y /= continent.cells.length;
+        let bestId = null;
+        let bestScore = Infinity;
+        candidates.forEach((id) => {
+          const point = points[id];
+          const seedPoint = points[continent.seedId];
+          const separationPenalty = continents.reduce((penalty, other) => {
+            if (other.id === continent.id) return penalty;
+            return penalty + Math.max(0, 110 - dist(point, points[other.seedId])) * 0.35;
+          }, 0);
+          const noise = (Math.sin((point.x + point.y) * 0.03 + seed[continent.id % seed.length]) + 1) * 12;
+          const score = dist(point, seedPoint) * 0.75 + Math.hypot(point.x - centroid.x, point.y - centroid.y) * 0.45 + separationPenalty + noise;
+          if (score < bestScore) {
+            bestScore = score;
+            bestId = id;
+          }
+        });
+        return bestId;
+      },
+
+      connectContinents(points, neighbors, landSet, continentIds, seedIds) {
+        let components = this.connectedComponents(neighbors, landSet);
+        while (components.length > 1) {
+          let best = null;
+          const boundaries = components.map((component) => {
+            const componentSet = new Set(component);
+            return component.filter((id) => neighbors[id].some((neighborId) => !componentSet.has(neighborId)));
+          });
+          for (let i = 0; i < components.length; i += 1) {
+            const source = boundaries[i].length ? boundaries[i] : components[i];
+            for (let j = i + 1; j < components.length; j += 1) {
+              const target = boundaries[j].length ? boundaries[j] : components[j];
+              source.forEach((fromId) => {
+                target.forEach((toId) => {
+                  const distance = dist(points[fromId], points[toId]);
+                  if (!best || distance < best.distance) {
+                    best = {
+                      fromId,
+                      toId,
+                      distance,
+                      sourceContinent: Math.max(0, continentIds[fromId]),
+                      targetContinent: Math.max(0, continentIds[toId])
+                    };
+                  }
+                });
+              });
+            }
+          }
+          if (!best) return false;
+          const path = this.shortestPath(best.fromId, best.toId, neighbors);
+          if (!path) return false;
+          path.forEach((id) => {
+            if (landSet.has(id)) return;
+            landSet.add(id);
+            const sourceSeed = points[seedIds[best.sourceContinent]] || points[best.fromId];
+            const targetSeed = points[seedIds[best.targetContinent]] || points[best.toId];
+            const sourceDistance = dist(points[id], sourceSeed);
+            const targetDistance = dist(points[id], targetSeed);
+            continentIds[id] = sourceDistance <= targetDistance ? best.sourceContinent : best.targetContinent;
+          });
+          components = this.connectedComponents(neighbors, landSet);
+        }
+        return true;
+      },
+
+      connectedComponents(neighbors, landSet) {
+        const remaining = new Set(landSet);
+        const components = [];
+        while (remaining.size) {
+          const [start] = remaining;
+          const queue = [start];
+          const component = [];
+          while (queue.length) {
+            const id = queue.shift();
+            if (!remaining.has(id)) continue;
+            remaining.delete(id);
+            component.push(id);
+            neighbors[id].forEach((neighborId) => {
+              if (remaining.has(neighborId)) queue.push(neighborId);
+            });
+          }
+          components.push(component);
+        }
+        return components;
+      },
+
+      shortestPath(startId, endId, neighbors) {
+        const queue = [startId];
+        const seen = new Set([startId]);
+        const previous = new Map();
+        while (queue.length) {
+          const id = queue.shift();
+          if (id === endId) break;
+          neighbors[id].forEach((neighborId) => {
+            if (seen.has(neighborId)) return;
+            seen.add(neighborId);
+            previous.set(neighborId, id);
+            queue.push(neighborId);
+          });
+        }
+        if (!seen.has(endId)) return null;
+        const path = [endId];
+        let current = endId;
+        while (current !== startId) {
+          current = previous.get(current);
+          if (current === undefined) return null;
+          path.unshift(current);
+        }
+        return path;
+      },
+
+      computeContinentCenters(points, continentIds) {
+        const centers = [];
+        continentIds.forEach((continentId, index) => {
+          if (continentId < 0) return;
+          if (!centers[continentId]) centers[continentId] = { x: 0, y: 0, count: 0 };
+          centers[continentId].x += points[index].x;
+          centers[continentId].y += points[index].y;
+          centers[continentId].count += 1;
+        });
+        return centers.map((center) => center ? { x: center.x / center.count, y: center.y / center.count } : null);
+      },
+
+      buildMaskProfile(polygons, seed, fullPoints = []) {
+        return {
+          seed: cloneJson(seed),
+          landPolygons: polygons.map((polygon) => cloneJson(polygon)),
+          coastSegments: this.buildCoastSegments(polygons),
+          fullPoints: cloneJson(fullPoints)
+        };
+      },
+
+      buildWorldProfile(territories, fullPoints, landSet, seed, continentIds) {
+        const bySource = new Map(territories.map((territory) => [territory.sourceId, territory]));
+        return {
+          seed: cloneJson(seed),
+          landPolygons: territories.map((territory) => cloneJson(territory.polygon)),
+          coastSegments: this.buildCoastSegments(territories.map((territory) => territory.polygon)),
+          fullPoints: fullPoints.map((point, index) => {
+            const territory = bySource.get(index);
+            return {
+              x: territory ? territory.x : point.x,
+              y: territory ? territory.y : point.y,
+              land: landSet.has(index),
+              name: territory ? territory.name : point.name || "",
+              terrain: territory ? territory.terrain : point.terrain || "plains",
+              ownerId: territory ? territory.ownerId : -1,
+              armies: territory ? territory.armies : 1,
+              continentId: continentIds[index] ?? -1
+            };
+          })
+        };
+      },
+
+      buildCoastSegments(polygons) {
+        const edges = new Map();
+        polygons.forEach((polygon) => {
+          for (let i = 0; i < polygon.length; i += 1) {
+            const start = polygon[i];
+            const end = polygon[(i + 1) % polygon.length];
+            const key = this.edgeKey(start, end);
+            const existing = edges.get(key);
+            if (existing) existing.count += 1;
+            else edges.set(key, { count: 1, segment: [start, end] });
+          }
+        });
+        return [...edges.values()].filter((edge) => edge.count === 1).map((edge) => edge.segment);
       },
 
       seedTerritories(territories, playerCount) {
@@ -420,6 +800,10 @@
       },
 
       pointInWorld(profile, x, y) {
+        if (!profile) return false;
+        if (Array.isArray(profile.landPolygons) && profile.landPolygons.length) {
+          return profile.landPolygons.some((polygon) => pointInPolygon({ x, y }, polygon));
+        }
         return profile.continents.some((continent) => pointInPolygon({ x, y }, continent.polygon)) ||
           profile.bridges.some((bridge) => this.pointToSegmentDistance(x, y, bridge) <= bridge.r);
       },
@@ -434,17 +818,17 @@
         return Math.hypot(x - px, y - py);
       },
 
-      sampleNodes(profile) {
+      sampleNodes(seed) {
         const points = [];
         const usedNames = new Set();
-        const cols = 7;
-        const rows = 6;
+        const cols = 8;
+        const rows = 7;
         for (let row = 0; row < rows; row += 1) {
           for (let col = 0; col < cols; col += 1) {
-            const x = (col + 0.5) * (CONFIG.mapWidth / cols) + rand(-26, 26);
-            const y = (row + 0.5) * (CONFIG.mapHeight / rows) + rand(-34, 34);
-            if (!this.pointInWorld(profile, x, y) || !this.farEnough(points, x, y)) continue;
-            points.push({ x, y, name: this.generateName(points.length, profile.seed, usedNames) });
+            const x = (col + 0.5) * (CONFIG.mapWidth / cols) + rand(-22, 22);
+            const y = (row + 0.5) * (CONFIG.mapHeight / rows) + rand(-24, 24);
+            if (!this.farEnough(points, x, y)) continue;
+            points.push({ x, y, name: this.generateName(points.length, seed, usedNames) });
           }
         }
         let tries = 0;
@@ -452,8 +836,8 @@
           const x = rand(48, CONFIG.mapWidth - 48);
           const y = rand(44, CONFIG.mapHeight - 44);
           tries += 1;
-          if (!this.pointInWorld(profile, x, y) || !this.farEnough(points, x, y)) continue;
-          points.push({ x, y, name: this.generateName(points.length, profile.seed, usedNames) });
+          if (!this.farEnough(points, x, y)) continue;
+          points.push({ x, y, name: this.generateName(points.length, seed, usedNames) });
         }
         return points.length >= CONFIG.nodeCount ? points.slice(0, CONFIG.nodeCount) : null;
       },
@@ -480,11 +864,16 @@
       },
 
       assignTerrain(point, profile) {
+        const seed = profile.seed || [0.3, 1.1, 2.2, 3.3, 4.4, 5.5];
         const latitude = Math.abs((point.y / CONFIG.mapHeight) * 2 - 1);
-        const ridge = profile.ridges.reduce((max, ridgeLine) => Math.max(max, this.segmentInfluence(point.x, point.y, ridgeLine)), 0);
-        const moisture = 0.52 + this.waveNoise(point.x * 0.013, point.y * 0.013, profile.seed) * 0.32;
-        if (ridge > 0.6) return "mountains";
-        if (moisture > 0.56 && latitude < 0.74) return "forest";
+        const centers = Array.isArray(profile.continentCenters) ? profile.continentCenters.filter(Boolean) : [];
+        const interior = centers.length
+          ? centers.reduce((best, center) => Math.min(best, dist(point, center)), Infinity)
+          : 140;
+        const mountainNoise = this.waveNoise(point.x * 0.011, point.y * 0.011, seed) + Math.max(0, 1 - interior / 170) * 0.52;
+        const moisture = 0.48 + this.waveNoise(point.x * 0.014, point.y * 0.012, seed) * 0.28;
+        if (mountainNoise > 0.62) return "mountains";
+        if (moisture > 0.54 && latitude < 0.78) return "forest";
         return "plains";
       },
 
@@ -898,15 +1287,15 @@
       }
 
       drawWorldOutline(ctx, profile) {
-        this.traceWorldPath(ctx, profile);
+        this.traceCoastPath(ctx, profile);
         ctx.strokeStyle = "rgba(4,9,16,.58)";
         ctx.lineWidth = 10;
         ctx.stroke();
-        this.traceWorldPath(ctx, profile);
+        this.traceCoastPath(ctx, profile);
         ctx.strokeStyle = "rgba(255,241,201,.08)";
         ctx.lineWidth = 4;
         ctx.stroke();
-        this.traceWorldPath(ctx, profile);
+        this.traceCoastPath(ctx, profile);
         ctx.strokeStyle = CONFIG.coastLine;
         ctx.lineWidth = 1.6;
         ctx.stroke();
@@ -1147,12 +1536,19 @@
 
       traceWorldPath(ctx, profile) {
         ctx.beginPath();
-        profile.continents.forEach((continent) => {
-          ctx.moveTo(continent.polygon[0].x, continent.polygon[0].y);
-          for (let i = 1; i < continent.polygon.length; i += 1) ctx.lineTo(continent.polygon[i].x, continent.polygon[i].y);
+        profile.landPolygons.forEach((polygon) => {
+          ctx.moveTo(polygon[0].x, polygon[0].y);
+          for (let i = 1; i < polygon.length; i += 1) ctx.lineTo(polygon[i].x, polygon[i].y);
           ctx.closePath();
         });
-        profile.bridges.forEach((bridge) => this.traceCapsule(ctx, bridge));
+      }
+
+      traceCoastPath(ctx, profile) {
+        ctx.beginPath();
+        profile.coastSegments.forEach((segment) => {
+          ctx.moveTo(segment[0].x, segment[0].y);
+          ctx.lineTo(segment[1].x, segment[1].y);
+        });
       }
 
       traceCapsule(ctx, bridge) {
@@ -1534,9 +1930,35 @@
       }
 
       serializeMap() {
+        const fullPoints = Array.isArray(this.state.worldProfile?.fullPoints) && this.state.worldProfile.fullPoints.length
+          ? this.state.worldProfile.fullPoints.map((point) => ({ ...point }))
+          : null;
+        if (fullPoints) {
+          this.state.territories.forEach((territory) => {
+            const slot = fullPoints[territory.sourceId];
+            if (!slot) return;
+            slot.x = territory.x;
+            slot.y = territory.y;
+            slot.land = true;
+            slot.name = territory.name;
+            slot.terrain = territory.terrain;
+            slot.ownerId = territory.ownerId;
+            slot.armies = territory.armies;
+          });
+        }
         return {
           playerCount: this.state.players.length,
-          profile: cloneJson(this.state.worldProfile),
+          profile: { seed: cloneJson(this.state.worldProfile?.seed || []) },
+          fullPoints: fullPoints || this.state.territories.map((territory) => ({
+            x: territory.x,
+            y: territory.y,
+            land: true,
+            name: territory.name,
+            terrain: territory.terrain,
+            ownerId: territory.ownerId,
+            armies: territory.armies,
+            continentId: 0
+          })),
           points: this.state.territories.map((territory) => ({
             x: territory.x,
             y: territory.y,
@@ -1584,10 +2006,11 @@
 
       moveCountry(territoryId, point) {
         const template = this.serializeMap();
-        if (!this.isValidEditorPoint(template.points, territoryId, point.x, point.y, template.profile)) return false;
+        const sourceId = this.state.getTerritory(territoryId)?.sourceId ?? territoryId;
+        if (!this.isValidEditorPoint(template.fullPoints, sourceId, point.x, point.y, template.profile)) return false;
         return this.rebuildEditorMap((draft) => {
-          draft.points[territoryId].x = point.x;
-          draft.points[territoryId].y = point.y;
+          draft.fullPoints[sourceId].x = point.x;
+          draft.fullPoints[sourceId].y = point.y;
         }, territoryId);
       }
 
@@ -1601,18 +2024,20 @@
       addCountryAt(point) {
         if (this.mode !== "editor") return;
         const template = this.serializeMap();
-        if (!this.isValidEditorPoint(template.points, -1, point.x, point.y, template.profile)) {
+        if (!this.isValidEditorPoint(template.fullPoints, -1, point.x, point.y, template.profile)) {
           this.state.pushLog("Place new countries on open land away from existing capitals.");
           return this.sync();
         }
-        const usedNames = new Set(template.points.map((item) => item.name));
-        template.points.push({
+        const usedNames = new Set(template.fullPoints.filter((item) => item.land !== false).map((item) => item.name));
+        template.fullPoints.push({
           x: point.x,
           y: point.y,
-          name: MapGenerator.generateName(template.points.length, template.profile.seed || [0, 1, 2, 3, 4, 5], usedNames),
-          terrain: MapGenerator.assignTerrain(point, template.profile),
+          land: true,
+          name: MapGenerator.generateName(template.fullPoints.length, template.profile.seed || [0, 1, 2, 3, 4, 5], usedNames),
+          terrain: MapGenerator.assignTerrain(point, { seed: template.profile.seed }),
           ownerId: -1,
-          armies: 1
+          armies: 1,
+          continentId: 0
         });
         const world = MapGenerator.buildWorldFromTemplate(template);
         if (!world) {
@@ -1629,9 +2054,10 @@
       deleteSelectedCountry() {
         if (this.mode !== "editor" || this.state.selectedTerritoryId === null || this.state.territories.length <= 8) return;
         const removeId = this.state.selectedTerritoryId;
+        const sourceId = this.state.getTerritory(removeId)?.sourceId ?? removeId;
         const label = this.state.getTerritory(removeId)?.name || "country";
         this.rebuildEditorMap((draft) => {
-          draft.points.splice(removeId, 1);
+          draft.fullPoints.splice(sourceId, 1);
         }, null, `${label} was removed from the map.`);
       }
 
